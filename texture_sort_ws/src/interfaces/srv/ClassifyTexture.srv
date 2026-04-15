@@ -1,0 +1,5 @@
+int32 object_id
+---
+bool success
+string message
+int32 texture_class

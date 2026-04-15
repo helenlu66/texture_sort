@@ -1,0 +1,12 @@
+vision_node:
+  ros__parameters:
+    frame_id: camera_color_optical_frame
+
+turtlebot_delivery_node:
+  ros__parameters:
+    loading_frame: map
+    unloading_frame: map
+
+task_manager_node:
+  ros__parameters:
+    number_of_texture_categories: 3

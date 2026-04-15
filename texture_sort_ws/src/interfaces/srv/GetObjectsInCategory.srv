@@ -1,0 +1,5 @@
+int32 category_id
+---
+int32[] object_ids
+bool success
+string message

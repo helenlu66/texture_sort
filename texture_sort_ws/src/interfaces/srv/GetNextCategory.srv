@@ -1,0 +1,4 @@
+---
+bool found
+int32 category_id
+string message

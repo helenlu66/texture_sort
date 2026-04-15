@@ -1,0 +1,7 @@
+int32 object_id
+geometry_msgs/Pose target_pose
+---
+bool success
+string message
+---
+string state

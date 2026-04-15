@@ -1,0 +1,7 @@
+int32 object_id
+int32 category_id
+---
+bool success
+string message
+---
+string state
