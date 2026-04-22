@@ -3,7 +3,7 @@
   <name>texture_sorting_manipulation</name>
   <version>0.1.0</version>
   <description>Manipulation action servers for grasp, place, and load operations.</description>
-  <maintainer email="user@example.com">User</maintainer>
+  <maintainer email="helenlu66@gmail.com">User</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

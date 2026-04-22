@@ -13,7 +13,7 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='User',
-    maintainer_email='user@example.com',
+    maintainer_email='helenlu66@gmail.com',
     description='Navigation/delivery node for TurtleBot delivery cycles via Nav2.',
     license='Apache-2.0',
     tests_require=['pytest'],

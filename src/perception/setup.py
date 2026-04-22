@@ -13,12 +13,13 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='User',
-    maintainer_email='user@example.com',
+    maintainer_email='helenlu66@gmail.com',
     description='Perception nodes for scene grounding and tactile classification.',
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={'console_scripts': [
             "vision_node = texture_sorting_perception.vision_node:main",
-            "tactile_node = texture_sorting_perception.tactile_node:main"
+            "tactile_node = texture_sorting_perception.tactile_node:main",
+            "kinova_rtsp_bridge = texture_sorting_perception.kinova_rtsp_bridge:main"
     ]},
 )
