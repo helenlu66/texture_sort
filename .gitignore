@@ -1,0 +1,4 @@
+# ROS 2 / colcon generated artifacts
+build/
+install/
+log/
