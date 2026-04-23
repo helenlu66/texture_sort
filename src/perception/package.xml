@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>texture_sorting_perception</name>
+  <name>perception</name>
   <version>0.1.0</version>
   <description>Perception nodes for scene grounding and tactile classification.</description>
   <maintainer email="helenlu66@gmail.com">User</maintainer>
@@ -13,7 +13,7 @@
   <depend>geometry_msgs</depend>
   <depend>std_srvs</depend>
   <depend>tf2_ros</depend>
-  <depend>texture_sorting_interfaces</depend>
+  <depend>interfaces</depend>
   <exec_depend>python3-opencv</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
 

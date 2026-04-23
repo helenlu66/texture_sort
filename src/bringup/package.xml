@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>texture_sorting_bringup</name>
+  <name>bringup</name>
   <version>0.1.0</version>
   <description>Launch and configuration package for the texture sorting system.</description>
   <maintainer email="helenlu66@gmail.com">User</maintainer>
@@ -9,11 +9,11 @@
   <buildtool_depend>ament_python</buildtool_depend>
   <depend>launch</depend>
   <depend>launch_ros</depend>
-  <depend>texture_sorting_interfaces</depend>
-  <depend>texture_sorting_perception</depend>
-  <depend>texture_sorting_manipulation</depend>
-  <depend>texture_sorting_navigation</depend>
-  <depend>texture_sorting_task_manager</depend>
+  <depend>interfaces</depend>
+  <depend>perception</depend>
+  <depend>manipulation</depend>
+  <depend>navigation</depend>
+  <depend>task_manager</depend>
 
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

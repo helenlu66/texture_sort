@@ -6,7 +6,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
 from tf2_ros import Buffer, TransformListener
-from texture_sorting_interfaces.action import ExecuteGrasp, ExecutePlace, LoadObjectIntoBox
+from interfaces.action import ExecuteGrasp, ExecutePlace, LoadObjectIntoBox
 
 
 class ManipulationNode(Node):

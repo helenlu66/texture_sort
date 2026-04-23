@@ -4,8 +4,8 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import Bool
-from texture_sorting_interfaces.msg import TextureClassification
-from texture_sorting_interfaces.srv import ClassifyTexture
+from interfaces.msg import TextureClassification
+from interfaces.srv import ClassifyTexture
 
 
 class TactileNode(Node):
@@ -18,6 +18,7 @@ class TactileNode(Node):
         self.texture_class_publisher = self.create_publisher(TextureClassification, '/texture_class', 10)
         self.create_service(ClassifyTexture, '/classify_texture', self.handle_classify_texture)
         self.get_logger().info('tactile_node ready')
+
 
     def handle_classify_texture(self, request, response):
         if not self._pinch_ready():

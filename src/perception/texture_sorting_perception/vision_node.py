@@ -4,8 +4,8 @@ import rclpy
 from geometry_msgs.msg import Pose
 from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image
-from texture_sorting_interfaces.msg import ObjectGrounding, ObjectGroundingArray
-from texture_sorting_interfaces.srv import DetectObjectPose, InitializeSceneObjects
+from interfaces.msg import ObjectGrounding, ObjectGroundingArray
+from interfaces.srv import DetectObjectPose, InitializeSceneObjects
 
 from .models import ObjectPoseEstimator, SceneRegistry
 

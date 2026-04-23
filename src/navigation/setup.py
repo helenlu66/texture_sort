@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'texture_sorting_navigation'
+package_name = 'navigation'
 
 setup(
     name=package_name,
@@ -18,6 +18,6 @@ setup(
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={'console_scripts': [
-            "delivery_node = texture_sorting_navigation.delivery_node:main"
+            "delivery_node = navigation.delivery_node:main"
     ]},
 )

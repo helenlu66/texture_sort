@@ -5,8 +5,8 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformListener
-from texture_sorting_interfaces.msg import DeliveryState
-from texture_sorting_interfaces.srv import CheckBaseReady
+from interfaces.msg import DeliveryState
+from interfaces.srv import CheckBaseReady
 
 
 class DeliveryNode(Node):

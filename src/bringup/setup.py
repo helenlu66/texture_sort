@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'texture_sorting_bringup'
+package_name = 'bringup'
 
 setup(
     name=package_name,

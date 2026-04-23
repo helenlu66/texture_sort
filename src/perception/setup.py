@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'texture_sorting_perception'
+package_name = 'perception'
 
 setup(
     name=package_name,
@@ -18,8 +18,8 @@ setup(
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={'console_scripts': [
-            "vision_node = texture_sorting_perception.vision_node:main",
-            "tactile_node = texture_sorting_perception.tactile_node:main",
-            "kinova_rtsp_bridge = texture_sorting_perception.kinova_rtsp_bridge:main"
+            "vision_node = perception.vision_node:main",
+            "tactile_node = perception.tactile_node:main",
+            "kinova_rtsp_bridge = perception.kinova_rtsp_bridge:main"
     ]},
 )

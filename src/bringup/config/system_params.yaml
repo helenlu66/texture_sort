@@ -10,3 +10,7 @@ turtlebot_delivery_node:
 task_manager_node:
   ros__parameters:
     number_of_texture_categories: 3
+
+apriltag:
+  ros__parameters:
+    size: 0.05

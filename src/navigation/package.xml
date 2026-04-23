@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>texture_sorting_navigation</name>
+  <name>navigation</name>
   <version>0.1.0</version>
   <description>Navigation/delivery node for TurtleBot delivery cycles via Nav2.</description>
   <maintainer email="helenlu66@gmail.com">User</maintainer>
@@ -14,7 +14,7 @@
   <depend>action_msgs</depend>
   <depend>nav2_msgs</depend>
   <depend>tf2_ros</depend>
-  <depend>texture_sorting_interfaces</depend>
+  <depend>interfaces</depend>
 
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

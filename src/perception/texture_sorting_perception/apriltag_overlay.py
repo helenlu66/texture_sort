@@ -24,7 +24,8 @@ class AprilTagOverlay(Node):
             self.detections_callback,
             10)
 
-        self.pub = self.create_publisher(Image, '/detections_image', 10)
+        self.image_pub = self.create_publisher(Image, '/detections_image', 10)
+        self.groundings_pub = self.create_publisher()
         self.get_logger().info('AprilTag overlay node started')
 
     def detections_callback(self, msg):
@@ -51,7 +52,10 @@ class AprilTagOverlay(Node):
 
         out_msg = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
         out_msg.header = msg.header
-        self.pub.publish(out_msg)
+        self.image_pub.publish(out_msg)
+    
+    def get_grounding(self, ):
+        raise NotImplementedError
 
 def main(args=None):
     rclpy.init(args=args)

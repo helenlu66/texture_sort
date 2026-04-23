@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>texture_sorting_task_manager</name>
+  <name>task_manager</name>
   <version>0.1.0</version>
   <description>High-level task manager coordinating perception, manipulation, and delivery.</description>
   <maintainer email="helenlu66@gmail.com">User</maintainer>
@@ -12,7 +12,7 @@
   <depend>geometry_msgs</depend>
   <depend>std_srvs</depend>
   <depend>action_msgs</depend>
-  <depend>texture_sorting_interfaces</depend>
+  <depend>interfaces</depend>
 
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

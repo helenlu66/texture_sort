@@ -2,4 +2,4 @@ import importlib
 
 
 def test_import_package():
-    importlib.import_module("texture_sorting_perception")
+    importlib.import_module("perception")

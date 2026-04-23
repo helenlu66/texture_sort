@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'texture_sorting_manipulation'
+package_name = 'manipulation'
 
 setup(
     name=package_name,
@@ -18,6 +18,6 @@ setup(
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={'console_scripts': [
-            "manipulation_node = texture_sorting_manipulation.manipulation_node:main"
+            "manipulation_node = manipulation.manipulation_node:main"
     ]},
 )

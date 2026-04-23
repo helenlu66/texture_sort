@@ -5,9 +5,9 @@ from geometry_msgs.msg import Pose
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from std_srvs.srv import Trigger
-from texture_sorting_interfaces.action import ExecuteGrasp, LoadObjectIntoBox
-from texture_sorting_interfaces.msg import DeliveryState, TaskState, TextureClassification
-from texture_sorting_interfaces.srv import CheckBaseReady, ClassifyTexture, DetectObjectPose, InitializeSceneObjects, StartSortAndDelivery
+from interfaces.action import ExecuteGrasp, LoadObjectIntoBox
+from interfaces.msg import DeliveryState, TaskState, TextureClassification
+from interfaces.srv import CheckBaseReady, ClassifyTexture, DetectObjectPose, InitializeSceneObjects, StartSortAndDelivery
 
 
 class TaskManagerNode(Node):
