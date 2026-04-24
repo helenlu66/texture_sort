@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>texture_sorting_interfaces</name>
+  <name>interfaces</name>
   <version>0.1.0</version>
   <description>Custom messages, services, and actions for the texture sorting project.</description>
   <maintainer email="helenlu66@gmail.com">User</maintainer>

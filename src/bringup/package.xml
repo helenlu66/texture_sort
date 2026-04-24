@@ -14,6 +14,8 @@
   <depend>manipulation</depend>
   <depend>navigation</depend>
   <depend>task_manager</depend>
+  <depend>rqt_image_view</depend>
+  <depend>realsense2_camera</depend>
 
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
