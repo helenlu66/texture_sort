@@ -19,8 +19,7 @@ setup(
     tests_require=['pytest'],
     entry_points={'console_scripts': [
             'external_cam_node = perception.vision_node:main',
+            'apriltag_overlay = perception.apriltag_overlay:main',
             'tactile_node = perception.tactile_node:main',
-            'kinova_rtsp_bridge = perception.kinova_rtsp_bridge:main',
-            'kinova_wrist_cam_node = perception.kinova_wrist_cam_node:main',
     ]},
 )

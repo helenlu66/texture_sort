@@ -97,15 +97,15 @@ class KinovaWristCamNode(Node):
         self._last_warn_ns = {}
 
         self.fx_c = self.fy_c = self.cx_c = self.cy_c = None
-        self.fx_d = self.fy_d = self.cx_d = self.cy_d = None
+        # self.fx_d = self.fy_d = self.cx_d = self.cy_d = None
         self.K_color = None
         self.D_color = None
-        self.K_depth = None
-        self.D_depth = None
+        # self.K_depth = None
+        # self.D_depth = None
         self.color_W = self.color_H = None
-        self.depth_W = self.depth_H = None
+        # self.depth_W = self.depth_H = None
         self.color_info_ready = False
-        self.depth_info_ready = False
+        # self.depth_info_ready = False
 
         self.current_ee_pose: Optional[Tuple[float, float, float, float, float, float, float]] = None
         self.base_feedback_type = None
@@ -118,9 +118,9 @@ class KinovaWristCamNode(Node):
         self._color_info_sub = self.create_subscription(
             CameraInfo, self.color_info_topic, self.color_info_callback, 10
         )
-        self._depth_info_sub = self.create_subscription(
-            CameraInfo, self.depth_info_topic, self.depth_info_callback, 10
-        )
+        # self._depth_info_sub = self.create_subscription(
+        #     CameraInfo, self.depth_info_topic, self.depth_info_callback, 10
+        # )
         try:
             import importlib
 
@@ -141,12 +141,13 @@ class KinovaWristCamNode(Node):
                 "kortex_driver is unavailable; EE feedback subscription disabled."
             )
 
-        self.depth_sub = message_filters.Subscriber(self, Image, self.depth_topic)
-        self.color_sub = message_filters.Subscriber(self, CompressedImage, self.rgb_topic)
-        self.ts = message_filters.ApproximateTimeSynchronizer(
-            [self.depth_sub, self.color_sub], queue_size=100, slop=0.05
-        )
-        self.ts.registerCallback(self.sync_callback)
+        # self.depth_sub = message_filters.Subscriber(self, Image, self.depth_topic)
+        # self.color_sub = message_filters.Subscriber(self, CompressedImage, self.rgb_topic)
+        # self.ts = message_filters.ApproximateTimeSynchronizer(
+        #     [self.depth_sub, self.color_sub], queue_size=100, slop=0.05
+        # )
+        # self.ts.registerCallback(self.sync_callback)
+        self.create_subscription(CompressedImage, self.rgb_topic, self.rgb_callback, 10)
 
         self.processor = None
         self.model = None
@@ -194,7 +195,7 @@ class KinovaWristCamNode(Node):
 
     @property
     def intrinsics_ready(self) -> bool:
-        return self.color_info_ready and self.depth_info_ready
+        return self.color_info_ready  # and self.depth_info_ready
 
     def color_info_callback(self, msg: CameraInfo) -> None:
         if self.color_info_ready:
@@ -214,23 +215,19 @@ class KinovaWristCamNode(Node):
             f"Color intrinsics ready fx={self.fx_c:.2f} fy={self.fy_c:.2f} cx={self.cx_c:.2f} cy={self.cy_c:.2f}"
         )
 
-    def depth_info_callback(self, msg: CameraInfo) -> None:
-        if self.depth_info_ready:
-            return
-
-        k = np.array(msg.k, dtype=np.float64).reshape(3, 3)
-        self.fx_d, self.fy_d = k[0, 0], k[1, 1]
-        self.cx_d, self.cy_d = k[0, 2], k[1, 2]
-        self.K_depth = k
-        self.D_depth = np.array(msg.d, dtype=np.float64)
-        self.depth_W, self.depth_H = msg.width, msg.height
-        self.depth_info_ready = True
-        if self._depth_info_sub is not None:
-            self.destroy_subscription(self._depth_info_sub)
-            self._depth_info_sub = None
-        self.get_logger().info(
-            f"Depth intrinsics ready fx={self.fx_d:.2f} fy={self.fy_d:.2f} cx={self.cx_d:.2f} cy={self.cy_d:.2f}"
-        )
+    # def depth_info_callback(self, msg: CameraInfo) -> None:
+    #     if self.depth_info_ready:
+    #         return
+    #     k = np.array(msg.k, dtype=np.float64).reshape(3, 3)
+    #     self.fx_d, self.fy_d = k[0, 0], k[1, 1]
+    #     self.cx_d, self.cy_d = k[0, 2], k[1, 2]
+    #     self.K_depth = k
+    #     self.D_depth = np.array(msg.d, dtype=np.float64)
+    #     self.depth_W, self.depth_H = msg.width, msg.height
+    #     self.depth_info_ready = True
+    #     if self._depth_info_sub is not None:
+    #         self.destroy_subscription(self._depth_info_sub)
+    #         self._depth_info_sub = None
 
     def feedback_callback(self, msg: Any) -> None:
         try:

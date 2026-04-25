@@ -16,6 +16,7 @@ class KinovaRtspBridge(Node):
         self.declare_parameter("frame_id", "wrist_camera_color_optical_frame")
         self.declare_parameter("fps", 15.0)
         self.declare_parameter("reconnect_sec", 1.0)
+        self.declare_parameter("encoding", "rgb8")
         self.declare_parameter("fx", 0.0)
         self.declare_parameter("fy", 0.0)
         self.declare_parameter("cx", 0.0)
@@ -31,6 +32,7 @@ class KinovaRtspBridge(Node):
         self.frame_id = self.get_parameter("frame_id").get_parameter_value().string_value
         self.fps = self.get_parameter("fps").get_parameter_value().double_value
         self.reconnect_sec = self.get_parameter("reconnect_sec").get_parameter_value().double_value
+        self.encoding = self.get_parameter("encoding").get_parameter_value().string_value
         self.fx = self.get_parameter("fx").get_parameter_value().double_value
         self.fy = self.get_parameter("fy").get_parameter_value().double_value
         self.cx = self.get_parameter("cx").get_parameter_value().double_value
@@ -99,26 +101,37 @@ class KinovaRtspBridge(Node):
         if not self._connect_if_needed():
             return
 
-        ok, frame_bgr = self.cap.read()
-        if not ok or frame_bgr is None:
+        ok, frame = self.cap.read()
+        if not ok or frame is None:
             self.get_logger().warn("RTSP read failed; reconnecting...")
             self.cap.release()
             self.cap = None
             return
 
-        # ROS standard for Image is RGB8. OpenCV yields BGR.
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        height, width, _ = frame_rgb.shape
+        if self.encoding == "mono16":
+            # Depth stream: collapse to single channel, promote to 16-bit.
+            if frame.ndim == 3:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame_data = frame.astype(np.uint16)
+            height, width = frame_data.shape
+            step = width * 2
+            payload = frame_data.tobytes()
+        else:
+            # ROS standard for Image is RGB8. OpenCV yields BGR.
+            frame_data = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            height, width, _ = frame_data.shape
+            step = width * 3
+            payload = np.asarray(frame_data, dtype=np.uint8).tobytes()
 
         img = Image()
         img.header.stamp = self.get_clock().now().to_msg()
         img.header.frame_id = self.frame_id
         img.height = height
         img.width = width
-        img.encoding = "rgb8"
+        img.encoding = self.encoding
         img.is_bigendian = False
-        img.step = width * 3
-        img.data = np.asarray(frame_rgb, dtype=np.uint8).tobytes()
+        img.step = step
+        img.data = payload
 
         if self.camera_info_msg is None or (
             self.camera_info_msg.width != width or self.camera_info_msg.height != height

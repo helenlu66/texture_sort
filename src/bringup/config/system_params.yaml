@@ -1,8 +1,8 @@
 external_cam_node:
   ros__parameters:
-    rgb_topic: /external_camera/image_raw
+    rgb_topic: /external_camera/color/image_raw
     depth_topic: /external_camera/depth/image_rect_raw
-    camera_info_topic: /external_camera/camera_info
+    camera_info_topic: /external_camera/color/camera_info
     objects_topic: /external_objects
     initialize_scene_service: /initialize_scene_objects
     detect_object_pose_service: /detect_object_pose
@@ -21,49 +21,24 @@ apriltag:
   ros__parameters:
     size: 0.05
 
-kinova_rtsp_bridge:
-  ros__parameters:
-    rtsp_url: rtsp://192.168.1.10/color
-    image_topic: /wrist_camera/color/image_rect_color/compressed
-    camera_info_topic: /wrist_camera/color/camera_info
-    frame_id: wrist_camera_color_optical_frame
-    fps: 15.0
-    reconnect_sec: 1.0
-    distortion_model: plumb_bob
-    distortion_coeffs: [0.0, 0.0, 0.0, 0.0, 0.0]
 
 external_depth_camera:
   ros__parameters:
     camera_name: external_camera
-    device_type: d435
-    serial_no: ''
+    device_type: d435i
+    serial_no: '925622071555'
     enable_color: true
-    rgb_camera.profile: 640,480,30
-    enable_depth: true
-    depth_module.profile: 640,480,30
+    rgb_camera.color_profile: '0,0,0'
+    enable_depth: false
     pointcloud.enable: false
 
-wrist_depth_camera:
+apriltag_overlay:
   ros__parameters:
-    camera_name: wrist_camera
-    device_type: d435
-    serial_no: ''
-    enable_color: false
-    enable_depth: true
-    depth_module.profile: 640,480,30
-    pointcloud.enable: false
+    image_topic: /external_camera/color/image_raw
+    camera_info_topic: /external_camera/color/camera_info
+    detections_topic: apriltag/detections
+    overlay_topic: /detections_image
+    grounding_topic: /groundings
+    tag_size: 0.05
 
-kinova_wrist_cam_node:
-  ros__parameters:
-    robot_name: my_gen3
-    process_rate: 0.5
-    color_info_topic: /wrist_camera/color/camera_info
-    depth_info_topic: /wrist_camera/depth/camera_info
-    depth_topic: /wrist_camera/depth/image_rect_raw
-    rgb_topic: /wrist_camera/color/image_rect_color/compressed
-    detector_labels: [pan, tomatoe, eggplant, red basket, leek]
-    detection_threshold: 0.15
-    ee_to_cam_translation: [0.0, 0.062, -0.114]
-    ee_to_cam_quaternion: [0.0, 0.0, -0.5, 0.0]
-    depth_to_color_translation: [-0.023, -0.005, 0.0]
-    enable_owlv2: true
+
