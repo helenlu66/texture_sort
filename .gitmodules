@@ -1,0 +1,10 @@
+[submodule "src/third_party/easy_handeye2"]
+	path = src/third_party/easy_handeye2
+	url = https://github.com/marcoesposito1988/easy_handeye2.git
+[submodule "src/third_party/ros2_kortex_vision"]
+	path = src/third_party/ros2_kortex_vision
+	url = https://github.com/Kinovarobotics/ros2_kortex_vision.git
+[submodule "src/third_party/kinova/ros2_kortex"]
+	path = src/third_party/kinova/ros2_kortex
+	url = https://github.com/Kinovarobotics/ros2_kortex.git
+	branch = jazzy
