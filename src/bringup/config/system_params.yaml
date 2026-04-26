@@ -17,20 +17,27 @@ task_manager_node:
   ros__parameters:
     number_of_texture_categories: 3
 
-apriltag:
-  ros__parameters:
-    size: 0.05
-
 
 external_depth_camera:
   ros__parameters:
+    serial_no: "'925622071555'"
     camera_name: external_camera
-    device_type: d435i
-    serial_no: '925622071555'
-    enable_color: true
-    rgb_camera.color_profile: '0,0,0'
-    enable_depth: false
-    pointcloud.enable: false
+    camera_namespace: ''
+    enable_color: 'true'
+    enable_depth: 'true'
+    pointcloud.enable: 'false'
+
+kinova_vision:
+  ros__parameters:
+    device: 192.168.1.10
+    camera: wrist_camera
+    color_frame_id: wrist_camera_color_optical_frame
+    launch_color: 'true'
+    launch_depth: 'false'
+
+apriltag:
+  ros__parameters:
+    size: 0.05
 
 apriltag_overlay:
   ros__parameters:

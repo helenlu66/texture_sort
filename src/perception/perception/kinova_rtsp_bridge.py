@@ -1,3 +1,4 @@
+import os
 import time
 import cv2
 import numpy as np
@@ -50,6 +51,7 @@ class KinovaRtspBridge(Node):
         self.cap = None
         self.last_connect_attempt = 0.0
         self.camera_info_msg = None
+        self._consecutive_failures = 0
 
         period = 1.0 / max(self.fps, 1.0)
         self.timer = self.create_timer(period, self._tick)
@@ -68,7 +70,10 @@ class KinovaRtspBridge(Node):
             self.cap.release()
 
         self.get_logger().info(f"Connecting to RTSP stream: {self.rtsp_url}")
-        self.cap = cv2.VideoCapture(self.rtsp_url)
+        # Discard corrupt frames rather than rendering them — stops H.264 macroblock flicker.
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "fflags;+discardcorrupt|allowed_media_types;video"
+        self.cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         if not self.cap.isOpened():
             self.get_logger().warn("Failed to open RTSP stream; retrying...")
             return False
@@ -103,10 +108,14 @@ class KinovaRtspBridge(Node):
 
         ok, frame = self.cap.read()
         if not ok or frame is None:
-            self.get_logger().warn("RTSP read failed; reconnecting...")
-            self.cap.release()
-            self.cap = None
+            self._consecutive_failures += 1
+            if self._consecutive_failures >= 5:
+                self.get_logger().warn("RTSP read failed repeatedly; reconnecting...")
+                self.cap.release()
+                self.cap = None
+                self._consecutive_failures = 0
             return
+        self._consecutive_failures = 0
 
         if self.encoding == "mono16":
             # Depth stream: collapse to single channel, promote to 16-bit.

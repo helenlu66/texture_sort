@@ -4,6 +4,8 @@ from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 import os
+import yaml
+
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -13,6 +15,12 @@ def generate_launch_description() -> LaunchDescription:
         'system_params.yaml',
     )
 
+    with open(params_file, 'r') as f:
+        params = yaml.safe_load(f)
+
+    rs = params.get('external_depth_camera', {}).get('ros__parameters', {})
+    kv = params.get('kinova_vision', {}).get('ros__parameters', {})
+
     rs_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -21,18 +29,23 @@ def generate_launch_description() -> LaunchDescription:
                 'rs_launch.py',
             )
         ),
-        launch_arguments={
-            'camera_name': 'external_camera',
-            'camera_namespace': '',
-            'serial_no': "'925622071555'",
-            'enable_color': 'true',
-            'enable_depth': 'true',
-            'pointcloud.enable': 'false',
-        }.items(),
+        launch_arguments=rs.items(),
+    )
+
+    kinova_vision_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory('kinova_vision'),
+                'launch',
+                'kinova_vision.launch.py',
+            )
+        ),
+        launch_arguments=kv.items(),
     )
 
     return LaunchDescription([
         rs_launch,
+        kinova_vision_launch,
         Node(
             package='apriltag_ros',
             executable='apriltag_node',
@@ -47,6 +60,7 @@ def generate_launch_description() -> LaunchDescription:
         ),
         Node(package='perception', executable='apriltag_overlay', name='apriltag_overlay', output='screen', parameters=[params_file]),
         Node(package='rqt_image_view', executable='rqt_image_view', name='external_camera_view', output='screen', arguments=['/detections_image']),
+        Node(package='rqt_image_view', executable='rqt_image_view', name='wrist_camera_view', output='screen', arguments=['/wrist_camera/color/image_raw']),
         # Node(package='perception', executable='external_cam_node', name='external_cam_node', output='screen', parameters=[params_file]),
         # Node(package='perception', executable='tactile_node', name='tactile_node', output='screen'),
         # Node(package='manipulation', executable='manipulation_node', name='manipulation_node', output='screen'),
