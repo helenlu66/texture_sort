@@ -8,6 +8,8 @@ from apriltag_msgs.msg import AprilTagDetectionArray
 from interfaces.msg import ObjectGrounding, ObjectGroundingArray
 from cv_bridge import CvBridge
 import cv2
+import tf2_ros
+import tf2_geometry_msgs
 
 
 class AprilTagOverlay(Node):
@@ -19,12 +21,13 @@ class AprilTagOverlay(Node):
         self.dist_coeffs = None
         self.camera_frame_id = ''
 
-        self.declare_parameter('image_topic', '/external_camera/color/image_raw')
-        self.declare_parameter('camera_info_topic', '/external_camera/color/camera_info')
+        self.declare_parameter('image_topic', '/wrist_camera/color/image_raw')
+        self.declare_parameter('camera_info_topic', '/wrist_camera/color/camera_info')
         self.declare_parameter('detections_topic', 'apriltag/detections')
         self.declare_parameter('overlay_topic', '/detections_image')
         self.declare_parameter('grounding_topic', '/groundings')
         self.declare_parameter('tag_size', 0.05)
+        self.declare_parameter('ee_frame', 'tool_frame')
 
         image_topic = str(self.get_parameter('image_topic').value)
         camera_info_topic = str(self.get_parameter('camera_info_topic').value)
@@ -32,6 +35,10 @@ class AprilTagOverlay(Node):
         overlay_topic = str(self.get_parameter('overlay_topic').value)
         grounding_topic = str(self.get_parameter('grounding_topic').value)
         self.tag_size = float(self.get_parameter('tag_size').value)
+        self.ee_frame = str(self.get_parameter('ee_frame').value)
+
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         h = self.tag_size / 2.0
         self.tag_corners_3d = np.array([
@@ -118,17 +125,26 @@ class AprilTagOverlay(Node):
 
                 pose = self.get_grounding(det, msg.header.stamp)
                 if pose:
-                    x = pose.pose.position.x
-                    y = pose.pose.position.y
-                    z = pose.pose.position.z
-                    self.get_logger().info(f'Detected tag ID {det.id} at ({x:.2f}, {y:.2f}, {z:.2f}) m')
+                    try:
+                        tf = self.tf_buffer.lookup_transform(
+                            self.ee_frame,
+                            pose.header.frame_id,
+                            rclpy.time.Time(),
+                            timeout=rclpy.duration.Duration(seconds=0.05),
+                        )
+                        ee_pose = tf2_geometry_msgs.do_transform_pose_stamped(pose, tf)
+                    except Exception:
+                        ee_pose = pose
+                    x = ee_pose.pose.position.x
+                    y = ee_pose.pose.position.y
+                    z = ee_pose.pose.position.z
                     g = ObjectGrounding()
                     g.object_id = det.id
-                    g.pose = pose
+                    g.pose = ee_pose
                     groundings.objects.append(g)
-                    cv2.putText(frame, f'({x:.2f},{y:.2f},{z:.2f})m', (cx + 10, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                    cv2.putText(frame, f'EE:({x:.2f},{y:.2f},{z:.2f})m', (cx + 10, cy), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
                 else:
-                    cv2.putText(frame, f'ID:{det.id} (no intrinsics)', (cx + 10, cy - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                    cv2.putText(frame, f'ID:{det.id} (no intrinsics)', (cx + 10, cy - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
         out_msg = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
         out_msg.header = msg.header

@@ -35,17 +35,36 @@ kinova_vision:
     launch_color: 'true'
     launch_depth: 'false'
 
+manipulation_node:
+  ros__parameters:
+    groundings_topic: /groundings
+
 apriltag:
   ros__parameters:
     size: 0.05
 
+# Static transform from tool_frame to wrist_camera_color_optical_frame.
+# x: in front of EE (along approach axis), z: above EE (along arm axis).
+# Rotation defaults to 0 — refine with easy_handeye2 calibration.
+wrist_camera_tf:
+  ros__parameters:
+    parent_frame: tool_frame
+    child_frame: wrist_camera_color_optical_frame
+    x: 0.0635
+    y: 0.0
+    z: 0.1397
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+
 apriltag_overlay:
   ros__parameters:
-    image_topic: /external_camera/color/image_raw
-    camera_info_topic: /external_camera/color/camera_info
+    image_topic: /wrist_camera/color/image_raw
+    camera_info_topic: /wrist_camera/color/camera_info
     detections_topic: apriltag/detections
     overlay_topic: /detections_image
     grounding_topic: /groundings
     tag_size: 0.05
+    ee_frame: tool_frame
 
 
