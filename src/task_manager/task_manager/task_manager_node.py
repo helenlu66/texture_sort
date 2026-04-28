@@ -1,7 +1,6 @@
 from typing import Dict, List, Optional
 
 import rclpy
-from geometry_msgs.msg import Pose
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from std_srvs.srv import Trigger
@@ -100,8 +99,6 @@ class TaskManagerNode(Node):
             return
         goal = ExecuteGrasp.Goal()
         goal.object_id = object_id
-        goal.target_pose = Pose()
-        goal.target_pose.orientation.w = 1.0
         future = self.execute_grasp_client.send_goal_async(goal)
         rclpy.spin_until_future_complete(self, future)
 
