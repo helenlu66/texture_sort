@@ -38,6 +38,11 @@ kinova_vision:
 manipulation_node:
   ros__parameters:
     groundings_topic: /groundings
+    base_frame: base_link
+    ee_link: end_effector_link
+    move_group: manipulator
+    vel_scale: 0.3
+    accel_scale: 0.3
 
 apriltag:
   ros__parameters:
@@ -48,7 +53,7 @@ apriltag:
 # Rotation defaults to 0 — refine with easy_handeye2 calibration.
 wrist_camera_tf:
   ros__parameters:
-    parent_frame: tool_frame
+    parent_frame: end_effector_link
     child_frame: wrist_camera_color_optical_frame
     x: 0.0635
     y: 0.0
@@ -65,6 +70,5 @@ apriltag_overlay:
     overlay_topic: /detections_image
     grounding_topic: /groundings
     tag_size: 0.05
-    ee_frame: tool_frame
-
+    ee_frame: end_effector_link
 

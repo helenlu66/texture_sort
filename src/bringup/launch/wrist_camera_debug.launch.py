@@ -29,13 +29,6 @@ def generate_launch_description() -> LaunchDescription:
             parameters=[params_file, wrist_rgb_params],
         ),
         Node(
-            package='perception',
-            executable='vnn_overlay',
-            name='vnn_overlay',
-            output='screen',
-            parameters=[params_file, vnn_params],
-        ),
-        Node(
             package='rqt_image_view',
             executable='rqt_image_view',
             name='wrist_rgb_view',

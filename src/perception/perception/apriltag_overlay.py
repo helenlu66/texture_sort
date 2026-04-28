@@ -130,7 +130,7 @@ class AprilTagOverlay(Node):
                             self.ee_frame,
                             pose.header.frame_id,
                             rclpy.time.Time(),
-                            timeout=rclpy.duration.Duration(seconds=0.05),
+                            timeout=rclpy.duration.Duration(seconds=0.0),
                         )
                         ee_pose = tf2_geometry_msgs.do_transform_pose_stamped(pose, tf)
                     except Exception:
