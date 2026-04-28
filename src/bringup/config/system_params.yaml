@@ -34,6 +34,7 @@ kinova_vision:
     color_frame_id: wrist_camera_color_optical_frame
     launch_color: 'true'
     launch_depth: 'false'
+    color_rtsp_element_config: color latency=200
 
 manipulation_node:
   ros__parameters:

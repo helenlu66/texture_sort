@@ -7,7 +7,7 @@ from sensor_msgs.msg import CameraInfo, Image
 from interfaces.msg import ObjectGrounding, ObjectGroundingArray
 from interfaces.srv import DetectObjectPose, InitializeSceneObjects
 
-from .models import ObjectPoseEstimator, SceneRegistry
+from .tactile_classifier import ObjectPoseEstimator, SceneRegistry
 
 
 class VisionNode(Node):

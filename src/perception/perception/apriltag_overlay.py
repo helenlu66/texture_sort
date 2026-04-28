@@ -2,6 +2,7 @@
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import PoseStamped
 from apriltag_msgs.msg import AprilTagDetectionArray
@@ -48,11 +49,11 @@ class AprilTagOverlay(Node):
             [-h,  h, 0.0],
         ], dtype=np.float32)
 
-        self.create_subscription(Image, image_topic, self.image_callback, 10)
-        self.create_subscription(CameraInfo, camera_info_topic, self._camera_info_callback, 10)
+        self.create_subscription(Image, image_topic, self.image_callback, qos_profile_sensor_data)
+        self.create_subscription(CameraInfo, camera_info_topic, self._camera_info_callback, qos_profile_sensor_data)
         self.create_subscription(AprilTagDetectionArray, detections_topic, self.detections_callback, 10)
 
-        self.image_pub = self.create_publisher(Image, overlay_topic, 10)
+        self.image_pub = self.create_publisher(Image, overlay_topic, qos_profile_sensor_data)
         self.grounding_pub = self.create_publisher(ObjectGroundingArray, grounding_topic, 10)
         self.get_logger().info('AprilTag overlay node started')
 
@@ -109,42 +110,30 @@ class AprilTagOverlay(Node):
         groundings = ObjectGroundingArray()
         groundings.header = msg.header
 
-        det_age = (
-            (msg.header.stamp.sec - self.latest_detections.header.stamp.sec)
-            + (msg.header.stamp.nanosec - self.latest_detections.header.stamp.nanosec) * 1e-9
-        ) if self.latest_detections else 999
-
         if self.latest_detections and self.latest_detections.detections:
             for det in self.latest_detections.detections:
-                corners = [(int(c.x), int(c.y)) for c in det.corners]
-                for i in range(4):
-                    cv2.line(frame, corners[i], corners[(i + 1) % 4], (0, 255, 0), 2)
+                try:
+                    corners = [(int(c.x), int(c.y)) for c in det.corners]
+                    for i in range(4):
+                        cv2.line(frame, corners[i], corners[(i + 1) % 4], (0, 255, 0), 2)
 
-                cx, cy = int(det.centre.x), int(det.centre.y)
-                cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
+                    cx, cy = int(det.centre.x), int(det.centre.y)
+                    cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
 
-                pose = self.get_grounding(det, msg.header.stamp)
-                if pose:
-                    try:
-                        tf = self.tf_buffer.lookup_transform(
-                            self.ee_frame,
-                            pose.header.frame_id,
-                            rclpy.time.Time(),
-                            timeout=rclpy.duration.Duration(seconds=0.0),
-                        )
-                        ee_pose = tf2_geometry_msgs.do_transform_pose_stamped(pose, tf)
-                    except Exception:
-                        ee_pose = pose
-                    x = ee_pose.pose.position.x
-                    y = ee_pose.pose.position.y
-                    z = ee_pose.pose.position.z
-                    g = ObjectGrounding()
-                    g.object_id = det.id
-                    g.pose = ee_pose
-                    groundings.objects.append(g)
-                    cv2.putText(frame, f'EE:({x:.2f},{y:.2f},{z:.2f})m', (cx + 10, cy), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-                else:
-                    cv2.putText(frame, f'ID:{det.id} (no intrinsics)', (cx + 10, cy - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+                    pose = self.get_grounding(det, msg.header.stamp)
+                    if pose:
+                        x = pose.pose.position.x
+                        y = pose.pose.position.y
+                        z = pose.pose.position.z
+                        g = ObjectGrounding()
+                        g.object_id = det.id
+                        g.pose = pose
+                        groundings.objects.append(g)
+                        cv2.putText(frame, f'CAM:({x:.2f},{y:.2f},{z:.2f})m', (cx + 10, cy), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+                    else:
+                        cv2.putText(frame, f'ID:{det.id} (no intrinsics)', (cx + 10, cy - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+                except Exception as e:
+                    self.get_logger().warn(f'skipping detection {det.id}: {e}', throttle_duration_sec=1.0)
 
         out_msg = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
         out_msg.header = msg.header
