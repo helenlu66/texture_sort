@@ -1,0 +1,20 @@
+{
+  "description": "Pre-load pose captured from /joint_states.",
+  "stamp": {
+    "sec": 1777498751,
+    "nanosec": 261685447
+  },
+  "frame_id": "base_link",
+  "arm_joints": {
+    "joint_1": 1.8050100262327327,
+    "joint_2": 0.5064098683955732,
+    "joint_3": 0.8463089851643317,
+    "joint_4": 1.4083175344794348,
+    "joint_5": -0.3712457212214817,
+    "joint_6": 1.387472040521003,
+    "joint_7": -1.0983398315060438
+  },
+  "gripper_joints": {
+    "robotiq_85_left_knuckle_joint": 0.007074257344007493
+  }
+}

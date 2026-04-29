@@ -3,6 +3,7 @@ import copy
 import json
 from pathlib import Path
 import threading
+import time
 
 from ament_index_python.packages import get_package_share_directory
 import rclpy
@@ -38,27 +39,27 @@ GRIPPER_OPEN = 0.0
 GRIPPER_CLOSED = 0.79   # Robotiq 2F-85 closed position is about 0.7929
 
 APPROACH_HEIGHT = 0.12   # metres above object before descending
-GRASP_Z_OFFSET  = 0.01   # metres above tag centre at grasp
-LIFT_HEIGHT     = 0.15   # metres to lift after closing gripper
 DEFAULT_GRASP_Z_OFFSET = 0.0 # tuned meters above tag center
 
 
-class ManipulationNode(Node):
+class GraspNode(Node):
     def __init__(self) -> None:
-        super().__init__('manipulation_node')
+        super().__init__('grasp_node')
 
         self.declare_parameter('groundings_topic', '/groundings')
         self.declare_parameter('base_frame', 'base_link')
         self.declare_parameter('ee_link', 'end_effector_link')
         self.declare_parameter('move_group', 'manipulator')
         self.declare_parameter('vel_scale', 0.3)
+        self.declare_parameter('lower_vel_scale', 0.1)
         self.declare_parameter('accel_scale', 0.3)
         self.declare_parameter('grasp_z_offset', DEFAULT_GRASP_Z_OFFSET)
         self.declare_parameter('approach_height', APPROACH_HEIGHT)
         self.declare_parameter('gripper_closed_position', GRIPPER_CLOSED)
+        self.declare_parameter('gripper_open_position', GRIPPER_OPEN)
         self.declare_parameter('grasp_point_offset_x', 0.0)
         self.declare_parameter('grasp_point_offset_y', 0.0)
-        self.declare_parameter('grasp_point_offset_z', 0.12)
+        self.declare_parameter('grasp_point_offset_z', 0.13)
         self.declare_parameter('pre_grasp_path', '')
 
         groundings_topic = str(self.get_parameter('groundings_topic').value)
@@ -66,10 +67,12 @@ class ManipulationNode(Node):
         self._ee_link     = str(self.get_parameter('ee_link').value)
         self._move_group  = str(self.get_parameter('move_group').value)
         self._vel_scale   = float(self.get_parameter('vel_scale').value)
+        self._lower_vel_scale = float(self.get_parameter('lower_vel_scale').value)
         self._accel_scale = float(self.get_parameter('accel_scale').value)
         self._grasp_z_offset = float(self.get_parameter('grasp_z_offset').value)
         self._approach_height = float(self.get_parameter('approach_height').value)
         self._gripper_closed_position = float(self.get_parameter('gripper_closed_position').value)
+        self._gripper_open_position = float(self.get_parameter('gripper_open_position').value)
         self._grasp_point_offset = Vector3(
             x=float(self.get_parameter('grasp_point_offset_x').value),
             y=float(self.get_parameter('grasp_point_offset_y').value),
@@ -102,6 +105,22 @@ class ManipulationNode(Node):
             callback_group=self._action_callback_group,
         )
 
+        self.grasp_then_reset_action_server = ActionServer(
+            self,
+            ExecuteGrasp,
+            '/grasp_then_reset',
+            self.grasp_then_reset_callback, # same sequence as pickup but without picking up the object
+            callback_group=self._action_callback_group,
+        )
+
+        self.reset_action_server = ActionServer(
+            self,
+            ExecuteGrasp,
+            '/reset_grasp',
+            self.grasp_then_reset_callback,  # same sequence as grasp_then_reset but with open_back_up=True and lift=False
+            callback_group=self._action_callback_group,
+        )
+        
         self.execute_grasp_action_server = ActionServer(
             self,
             ExecuteGrasp,
@@ -117,7 +136,7 @@ class ManipulationNode(Node):
             callback_group=self._action_callback_group,
         )
 
-        self.get_logger().info('manipulation_node ready')
+        self.get_logger().info('grasp_node ready')
 
     # ------------------------------------------------------------------ #
     # Subscriptions                                                        #
@@ -134,8 +153,52 @@ class ManipulationNode(Node):
     # Actions                                                             #
     # ------------------------------------------------------------------ #
 
+    def grasp_then_reset_callback(self, goal_handle):
+        """Grasp the object, then opens the gripper, returs to the approach height, and returns to the pre-grasp pose without picking up the object. Used for collecting tactile data from each object."""
+        success, message = self._run_grasp_sequence(goal_handle, open_back_up=True, lift=True)
+        if not success:
+            return self._abort(goal_handle, message)
+        
+        goal_handle.succeed()
+        r = ExecuteGrasp.Result()
+        r.success = True
+        r.message = message
+        return r
+
+    def reset_grasp_callback(self, goal_handle):
+        """Opens the gripper, returs to the approach height, and returns to the pre-grasp pose"""
+        # open the gripper
+        if not self._gripper_cmd(self._gripper_open_position):
+            return self._abort(goal_handle, 'Gripper open command failed.')
+        
+        # go back up to the approach height. It's the current gripper pose with z = approach height
+        current_ee_tf = self.tf_buffer.lookup_transform(
+            self._base_frame,
+            self._ee_link,
+            rclpy.time.Time(),
+            timeout=rclpy.duration.Duration(seconds=1.0),
+        )
+        approach_target = PoseStamped()
+        approach_target.header = current_ee_tf.header
+        approach_target.pose = current_ee_tf.transform
+        approach_target.pose.position.z = self._approach_height
+        moved, message = self._move_to_pose(approach_target)
+        if not moved:
+            return self._abort(goal_handle, f'Approach motion failed: {message}')
+        
+        # return to pre-grasp pose
+        returned, message = self.return_to_pre_grasp()
+        if not returned:
+            return self._abort(goal_handle, f'Failed to return to pre-grasp pose: {message}')
+        goal_handle.succeed()
+        r = ExecuteGrasp.Result()
+        r.success = True
+        r.message = 'Grasp reset successful.'
+        return r
+
+
     def execute_grasp_callback(self, goal_handle):
-        success, message = self._run_grasp_sequence(goal_handle, lift_after_close=False)
+        success, message = self._run_grasp_sequence(goal_handle, lift=False)
         if not success:
             return self._abort(goal_handle, message)
 
@@ -146,7 +209,7 @@ class ManipulationNode(Node):
         return r
 
     def pickup_callback(self, goal_handle):
-        success, message = self._run_grasp_sequence(goal_handle, lift_after_close=True)
+        success, message = self._run_grasp_sequence(goal_handle, lift=True)
         if not success:
             return self._abort(goal_handle, message)
 
@@ -156,7 +219,19 @@ class ManipulationNode(Node):
         r.message = message
         return r
 
-    def _run_grasp_sequence(self, goal_handle, lift_after_close: bool) -> tuple[bool, str]:
+    # ------------------------------------------------------------------ #
+    # Helpers                                                              #
+    # ------------------------------------------------------------------ #
+    def _run_grasp_sequence(self, goal_handle, open_back_up:bool=False, lift: bool=False) -> tuple[bool, str]:
+        """Grasp the object, with the option to open the gripper back up and the option to go back up.
+        Args:
+            goal_handle: The goal handle for the grasp action.
+            open_back_up: Whether to open the gripper back up after grasping.
+            lift: Whether to lift the object after grasping.
+        Returns:
+            A tuple of (success, message).
+        """
+
         oid = goal_handle.request.object_id
 
         def fb(state: str):
@@ -210,9 +285,22 @@ class ManipulationNode(Node):
         moved, message = self._move_to_pose(approach_ee_target)
         if not moved:
             return False, f'Approach motion failed: {message}'
+        
+        # wait for 2 seconds
+        # time.sleep(2.0)
+        # # resolve target again for better x, y precision after moving to approach pose
+        # grasp_target_in_base = self._resolve_grasp_target(oid)
+        # if grasp_target_in_base is None:
+        #     return False, f'No grounding for object {oid} after moving to approach pose.'
+        # # use the old z but updated x, y for the grasp pose to try to correct for any x, y error in the original grounding
+        # new_grasp_ee_target = self._ee_target_for_grasp_point(grasp_target_in_base)
+        # new_grasp_ee_target.pose.position.z = grasp_ee_target.pose.position.z
 
         fb('lowering_to_object')
-        moved, message = self._move_to_pose(grasp_ee_target)
+        moved, message = self._move_to_pose(
+            grasp_ee_target,
+            velocity_scale=self._lower_vel_scale,
+        )
         if not moved:
             return False, f'Descent motion failed: {message}'
 
@@ -221,17 +309,23 @@ class ManipulationNode(Node):
             return False, 'Gripper close command failed.'
         self._publish_grasp_state(True)
 
-        if lift_after_close:
-            lift_target = copy.deepcopy(grasp_ee_target)
-            lift_target.pose.position.z += self._approach_height
-            p = lift_target.pose.position
-            self.get_logger().info(
-                f'[grasp {oid}] lift target for {self._ee_link} in base_link: '
-                f'pos=({p.x:.4f}, {p.y:.4f}, {p.z:.4f})'
-            )
+        if open_back_up:
+            fb('opening_gripper')
+            if not self._gripper_cmd(self._gripper_open_position):
+                return False, 'Gripper open command failed after grasping.'
+            self._publish_grasp_state(False)
 
-            fb('lifting_object')
-            moved, message = self._move_to_pose(lift_target)
+        if lift:
+            # lift_target = copy.deepcopy(grasp_ee_target)
+            # lift_target.pose.position.z += self._approach_height
+            # p = lift_target.pose.position
+            # self.get_logger().info(
+            #     f'[grasp {oid}] lift target for {self._ee_link} in base_link: '
+            #     f'pos=({p.x:.4f}, {p.y:.4f}, {p.z:.4f})'
+            # )
+
+            fb('lifting')
+            moved, message = self.return_to_approach_height(grasp_ee_target)
             if not moved:
                 return False, f'Lift motion failed: {message}'
 
@@ -241,13 +335,10 @@ class ManipulationNode(Node):
                 return False, f'Return to pre_grasp failed: {message}'
 
         fb('done')
-        if lift_after_close:
-            return True, f'Picked up object {oid} and returned to pre_grasp.'
+        if lift:
+            return True, f'Grasped object {oid} and returned to pre_grasp.'
         return True, f'Moved to object {oid} and closed gripper.'
 
-    # ------------------------------------------------------------------ #
-    # Helpers                                                              #
-    # ------------------------------------------------------------------ #
 
     def _resolve_grasp_target(self, object_id: int) -> Optional[PoseStamped]:
         grounded_pose = self._object_poses.get(object_id)
@@ -316,6 +407,12 @@ class ManipulationNode(Node):
         )
         return ee_target
 
+    def return_to_approach_height(self, target: PoseStamped) -> tuple[bool, str]:
+        """Move the end effector back up to the approach height above the target, without changing x/y or orientation. Used for going back up after grasping."""
+        approach_target = copy.deepcopy(target)
+        approach_target.pose.position.z += self._approach_height
+        return self._move_to_pose(approach_target)
+    
     def return_to_pre_grasp(self) -> tuple[bool, str]:
         pre_grasp_path = self._resolve_pre_grasp_path()
         with pre_grasp_path.open('r', encoding='utf-8') as f:
@@ -396,7 +493,12 @@ class ManipulationNode(Node):
             return False, message
         return True, 'MoveGroup joint goal succeeded'
 
-    def _move_to_pose(self, target: PoseStamped, timeout_sec: float = 15.0) -> tuple[bool, str]:
+    def _move_to_pose(
+        self,
+        target: PoseStamped,
+        timeout_sec: float = 15.0,
+        velocity_scale: Optional[float] = None,
+    ) -> tuple[bool, str]:
         if not self._move_group_client.wait_for_server(timeout_sec=5.0):
             self.get_logger().error('MoveGroup action server not available')
             return False, 'MoveGroup action server not available'
@@ -405,7 +507,7 @@ class ManipulationNode(Node):
         req.group_name = self._move_group
         req.num_planning_attempts = 5
         req.allowed_planning_time = 5.0
-        req.max_velocity_scaling_factor = self._vel_scale
+        req.max_velocity_scaling_factor = self._vel_scale if velocity_scale is None else float(velocity_scale)
         req.max_acceleration_scaling_factor = self._accel_scale
 
         req.workspace_parameters = WorkspaceParameters()
@@ -546,7 +648,7 @@ def _rotate_vector(q: Quaternion, v: Vector3) -> Vector3:
 
 def main(args=None) -> None:
     rclpy.init(args=args)
-    node = ManipulationNode()
+    node = GraspNode()
     executor = MultiThreadedExecutor(num_threads=2)
     executor.add_node(node)
     try:

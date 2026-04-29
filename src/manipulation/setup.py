@@ -19,6 +19,6 @@ setup(
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={'console_scripts': [
-            "manipulation_node = manipulation.manipulation_node:main"
+            "grasp_node = manipulation.grasp_node:main"
     ]},
 )
