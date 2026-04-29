@@ -1,6 +1,10 @@
 from typing import Optional
+import copy
+import json
+from pathlib import Path
 import threading
 
+from ament_index_python.packages import get_package_share_directory
 import rclpy
 import rclpy.duration
 import rclpy.time
@@ -9,7 +13,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from geometry_msgs.msg import (
-    PoseStamped, Vector3,
+    PoseStamped, Quaternion, Vector3,
 )
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
@@ -17,7 +21,7 @@ from shape_msgs.msg import SolidPrimitive
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
     MotionPlanRequest, Constraints,
-    PositionConstraint, OrientationConstraint,
+    PositionConstraint, OrientationConstraint, JointConstraint,
     BoundingVolume, WorkspaceParameters,
     MoveItErrorCodes,
 )
@@ -31,12 +35,12 @@ from interfaces.msg import ObjectGroundingArray
 
 # Robotiq 2F-85: 0.0 = fully open, 0.8 = fully closed
 GRIPPER_OPEN = 0.0
-GRIPPER_CLOSED = 0.6   # adjust for object thickness
+GRIPPER_CLOSED = 0.79   # Robotiq 2F-85 closed position is about 0.7929
 
 APPROACH_HEIGHT = 0.12   # metres above object before descending
 GRASP_Z_OFFSET  = 0.01   # metres above tag centre at grasp
 LIFT_HEIGHT     = 0.15   # metres to lift after closing gripper
-SAFE_GRASP_Z_OFFSET = 0.10  # metres above detected object for early testing
+DEFAULT_GRASP_Z_OFFSET = 0.0 # tuned meters above tag center
 
 
 class ManipulationNode(Node):
@@ -49,6 +53,13 @@ class ManipulationNode(Node):
         self.declare_parameter('move_group', 'manipulator')
         self.declare_parameter('vel_scale', 0.3)
         self.declare_parameter('accel_scale', 0.3)
+        self.declare_parameter('grasp_z_offset', DEFAULT_GRASP_Z_OFFSET)
+        self.declare_parameter('approach_height', APPROACH_HEIGHT)
+        self.declare_parameter('gripper_closed_position', GRIPPER_CLOSED)
+        self.declare_parameter('grasp_point_offset_x', 0.0)
+        self.declare_parameter('grasp_point_offset_y', 0.0)
+        self.declare_parameter('grasp_point_offset_z', 0.12)
+        self.declare_parameter('pre_grasp_path', '')
 
         groundings_topic = str(self.get_parameter('groundings_topic').value)
         self._base_frame  = str(self.get_parameter('base_frame').value)
@@ -56,6 +67,15 @@ class ManipulationNode(Node):
         self._move_group  = str(self.get_parameter('move_group').value)
         self._vel_scale   = float(self.get_parameter('vel_scale').value)
         self._accel_scale = float(self.get_parameter('accel_scale').value)
+        self._grasp_z_offset = float(self.get_parameter('grasp_z_offset').value)
+        self._approach_height = float(self.get_parameter('approach_height').value)
+        self._gripper_closed_position = float(self.get_parameter('gripper_closed_position').value)
+        self._grasp_point_offset = Vector3(
+            x=float(self.get_parameter('grasp_point_offset_x').value),
+            y=float(self.get_parameter('grasp_point_offset_y').value),
+            z=float(self.get_parameter('grasp_point_offset_z').value),
+        )
+        self._pre_grasp_path = str(self.get_parameter('pre_grasp_path').value)
         self._action_callback_group = ReentrantCallbackGroup()
 
         self.current_joint_state: Optional[JointState] = None
@@ -89,6 +109,13 @@ class ManipulationNode(Node):
             self.execute_grasp_callback,
             callback_group=self._action_callback_group,
         )
+        self.pickup_action_server = ActionServer(
+            self,
+            ExecuteGrasp,
+            '/pickup',
+            self.pickup_callback,
+            callback_group=self._action_callback_group,
+        )
 
         self.get_logger().info('manipulation_node ready')
 
@@ -104,10 +131,32 @@ class ManipulationNode(Node):
         self.current_joint_state = msg
 
     # ------------------------------------------------------------------ #
-    # ExecuteGrasp action                                                  #
+    # Actions                                                             #
     # ------------------------------------------------------------------ #
 
     def execute_grasp_callback(self, goal_handle):
+        success, message = self._run_grasp_sequence(goal_handle, lift_after_close=False)
+        if not success:
+            return self._abort(goal_handle, message)
+
+        goal_handle.succeed()
+        r = ExecuteGrasp.Result()
+        r.success = True
+        r.message = message
+        return r
+
+    def pickup_callback(self, goal_handle):
+        success, message = self._run_grasp_sequence(goal_handle, lift_after_close=True)
+        if not success:
+            return self._abort(goal_handle, message)
+
+        goal_handle.succeed()
+        r = ExecuteGrasp.Result()
+        r.success = True
+        r.message = message
+        return r
+
+    def _run_grasp_sequence(self, goal_handle, lift_after_close: bool) -> tuple[bool, str]:
         oid = goal_handle.request.object_id
 
         def fb(state: str):
@@ -118,25 +167,83 @@ class ManipulationNode(Node):
 
         fb('resolving_target_pose')
         try:
-            target_in_base = self._resolve_grasp_target(oid)
+            grasp_target_in_base = self._resolve_grasp_target(oid)
         except Exception as e:
-            return self._abort(goal_handle, f'TF lookup failed: {e}')
-        if target_in_base is None:
-            return self._abort(
-                goal_handle,
-                f'No grounding for object {oid}.',
+            return False, f'TF lookup failed: {e}'
+        if grasp_target_in_base is None:
+            return False, f'No grounding for object {oid}.'
+
+        p = grasp_target_in_base.pose.position
+        q = grasp_target_in_base.pose.orientation
+        # print out the current ee's pose in base_link for debugging
+        current_ee_tf = self.tf_buffer.lookup_transform(
+            self._base_frame,
+            self._ee_link,
+            rclpy.time.Time(),
+            timeout=rclpy.duration.Duration(seconds=1.0),
+        )
+        current_ee_pos = current_ee_tf.transform.translation
+        current_ee_ori = current_ee_tf.transform.rotation
+        self.get_logger().info(
+            f'[grasp {oid}] current {self._ee_link} pose in {self._base_frame}: '
+            f'pos=({current_ee_pos.x:.4f}, {current_ee_pos.y:.4f}, {current_ee_pos.z:.4f})  '
+            f'quat=({current_ee_ori.x:.4f}, {current_ee_ori.y:.4f}, {current_ee_ori.z:.4f}, {current_ee_ori.w:.4f})'
+        )
+        self.get_logger().info(
+            f'[grasp {oid}] grasp_point target in base_link: '
+            f'pos=({p.x:.4f}, {p.y:.4f}, {p.z:.4f})  '
+            f'quat=({q.x:.4f}, {q.y:.4f}, {q.z:.4f}, {q.w:.4f})'
+        )
+
+        approach_grasp_target = copy.deepcopy(grasp_target_in_base)
+        approach_grasp_target.pose.position.z += self._approach_height
+        ap = approach_grasp_target.pose.position
+        self.get_logger().info(
+            f'[grasp {oid}] grasp_point approach target in base_link: '
+            f'pos=({ap.x:.4f}, {ap.y:.4f}, {ap.z:.4f})'
+        )
+
+        approach_ee_target = self._ee_target_for_grasp_point(approach_grasp_target)
+        grasp_ee_target = self._ee_target_for_grasp_point(grasp_target_in_base)
+
+        fb('moving_to_approach')
+        moved, message = self._move_to_pose(approach_ee_target)
+        if not moved:
+            return False, f'Approach motion failed: {message}'
+
+        fb('lowering_to_object')
+        moved, message = self._move_to_pose(grasp_ee_target)
+        if not moved:
+            return False, f'Descent motion failed: {message}'
+
+        fb('closing_gripper')
+        if not self._gripper_cmd(self._gripper_closed_position):
+            return False, 'Gripper close command failed.'
+        self._publish_grasp_state(True)
+
+        if lift_after_close:
+            lift_target = copy.deepcopy(grasp_ee_target)
+            lift_target.pose.position.z += self._approach_height
+            p = lift_target.pose.position
+            self.get_logger().info(
+                f'[grasp {oid}] lift target for {self._ee_link} in base_link: '
+                f'pos=({p.x:.4f}, {p.y:.4f}, {p.z:.4f})'
             )
 
-        moved, message = self._move_to_pose(target_in_base)
-        if not moved:
-            return self._abort(goal_handle, f'Grasp motion failed: {message}')
+            fb('lifting_object')
+            moved, message = self._move_to_pose(lift_target)
+            if not moved:
+                return False, f'Lift motion failed: {message}'
+
+            fb('returning_to_pre_grasp')
+            returned, message = self.return_to_pre_grasp()
+            if not returned:
+                return False, f'Return to pre_grasp failed: {message}'
 
         fb('done')
-        goal_handle.succeed()
-        r = ExecuteGrasp.Result()
-        r.success = True
-        r.message = f'Moved {self._ee_link} to target pose for object {oid}.'
-        return r
+        if lift_after_close:
+            return True, f'Picked up object {oid} and returned to pre_grasp.'
+        return True, f'Moved to object {oid} and closed gripper.'
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
@@ -147,21 +254,147 @@ class ManipulationNode(Node):
         if grounded_pose is None:
             return None
 
-        if grounded_pose.header.frame_id == self._base_frame:
-            target = PoseStamped()
-            target.header = grounded_pose.header
-            target.pose = grounded_pose.pose
-        else:
-            tf = self.tf_buffer.lookup_transform(
-                self._base_frame,
-                grounded_pose.header.frame_id,
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=1.0),
-            )
-            target = tf2_geometry_msgs.do_transform_pose_stamped(grounded_pose, tf)
+        p = grounded_pose.pose.position
+        q = grounded_pose.pose.orientation
+        self.get_logger().info(
+            f'[debug] object in camera ({grounded_pose.header.frame_id}): '
+            f'pos=({p.x:.4f}, {p.y:.4f}, {p.z:.4f})  '
+            f'quat=({q.x:.4f}, {q.y:.4f}, {q.z:.4f}, {q.w:.4f})'
+        )
 
-        target.pose.position.z += SAFE_GRASP_Z_OFFSET
+        tf = self.tf_buffer.lookup_transform(
+            self._base_frame,
+            grounded_pose.header.frame_id,
+            grounded_pose.header.stamp,
+            timeout=rclpy.duration.Duration(seconds=1.0),
+        )
+        t = tf.transform.translation
+        r = tf.transform.rotation
+        self.get_logger().info(
+            f'[debug] tf {grounded_pose.header.frame_id} -> {self._base_frame}: '
+            f'trans=({t.x:.4f}, {t.y:.4f}, {t.z:.4f})  '
+            f'quat=({r.x:.4f}, {r.y:.4f}, {r.z:.4f}, {r.w:.4f})'
+        )
+        target = tf2_geometry_msgs.do_transform_pose_stamped(grounded_pose, tf)
+
+        p = target.pose.position
+        q = target.pose.orientation
+        self.get_logger().info(
+            f'[debug] object in base_link (pre-offset): '
+            f'pos=({p.x:.4f}, {p.y:.4f}, {p.z:.4f})  '
+            f'quat=({q.x:.4f}, {q.y:.4f}, {q.z:.4f}, {q.w:.4f})'
+        )
+
+        target.pose.position.z += self._grasp_z_offset
+
+        current_ee_tf = self.tf_buffer.lookup_transform(
+            self._base_frame,
+            self._ee_link,
+            rclpy.time.Time(),
+            timeout=rclpy.duration.Duration(seconds=1.0),
+        )
+        target.pose.orientation = current_ee_tf.transform.rotation
+
+        # self.get_logger().info(
+        #     f'[debug] grasp orientation in base_link: '
+        #     f'using current {self._ee_link} orientation and ignoring tag orientation'
+        # )
         return target
+
+    def _ee_target_for_grasp_point(self, grasp_point_target: PoseStamped) -> PoseStamped:
+        ee_target = copy.deepcopy(grasp_point_target)
+        offset = _rotate_vector(ee_target.pose.orientation, self._grasp_point_offset)
+        ee_target.pose.position.x -= offset.x
+        ee_target.pose.position.y -= offset.y
+        ee_target.pose.position.z -= offset.z
+
+        p = ee_target.pose.position
+        self.get_logger().info(
+            f'[debug] commanded {self._ee_link} target after grasp_point offset: '
+            f'pos=({p.x:.4f}, {p.y:.4f}, {p.z:.4f})  '
+            f'offset_in_base=({offset.x:.4f}, {offset.y:.4f}, {offset.z:.4f})'
+        )
+        return ee_target
+
+    def return_to_pre_grasp(self) -> tuple[bool, str]:
+        pre_grasp_path = self._resolve_pre_grasp_path()
+        with pre_grasp_path.open('r', encoding='utf-8') as f:
+            pre_grasp = json.load(f)
+
+        arm_joints = pre_grasp.get('arm_joints')
+        if not isinstance(arm_joints, dict) or not arm_joints:
+            return False, f'No arm_joints found in {pre_grasp_path}'
+
+        self.get_logger().info(
+            f'Returning to pre_grasp from {pre_grasp_path}: '
+            + ', '.join(f'{name}={position:.4f}' for name, position in arm_joints.items())
+        )
+        return self._move_to_joint_positions(arm_joints)
+
+    def _resolve_pre_grasp_path(self) -> Path:
+        if self._pre_grasp_path:
+            return Path(self._pre_grasp_path).expanduser()
+
+        share_path = Path(get_package_share_directory('manipulation')) / 'pre_grasp.json'
+        if share_path.exists():
+            return share_path
+
+        return Path(__file__).resolve().parents[1] / 'pre_grasp.json'
+
+    def _move_to_joint_positions(
+        self,
+        joint_positions: dict[str, float],
+        timeout_sec: float = 20.0,
+    ) -> tuple[bool, str]:
+        if not self._move_group_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().error('MoveGroup action server not available')
+            return False, 'MoveGroup action server not available'
+
+        req = MotionPlanRequest()
+        req.group_name = self._move_group
+        req.num_planning_attempts = 5
+        req.allowed_planning_time = 5.0
+        req.max_velocity_scaling_factor = self._vel_scale
+        req.max_acceleration_scaling_factor = self._accel_scale
+
+        goal_constraints = Constraints()
+        for name, position in joint_positions.items():
+            joint_constraint = JointConstraint()
+            joint_constraint.joint_name = name
+            joint_constraint.position = float(position)
+            joint_constraint.tolerance_above = 0.01
+            joint_constraint.tolerance_below = 0.01
+            joint_constraint.weight = 1.0
+            goal_constraints.joint_constraints.append(joint_constraint)
+        req.goal_constraints.append(goal_constraints)
+
+        goal = MoveGroup.Goal()
+        goal.request = req
+        goal.planning_options.plan_only = False
+        goal.planning_options.replan = True
+        goal.planning_options.replan_attempts = 3
+
+        event = threading.Event()
+        result_holder = [None]
+
+        def done_cb(future):
+            result_holder[0] = future.result()
+            event.set()
+
+        future = self._move_group_client.send_goal_async(goal)
+        future.add_done_callback(lambda f: f.result().get_result_async().add_done_callback(done_cb))
+        event.wait(timeout=timeout_sec)
+
+        if result_holder[0] is None:
+            self.get_logger().error('MoveGroup joint goal timed out')
+            return False, 'MoveGroup joint goal timed out'
+
+        code = result_holder[0].result.error_code.val
+        if code != MoveItErrorCodes.SUCCESS:
+            message = f'MoveGroup joint goal failed with code {code}'
+            self.get_logger().error(message)
+            return False, message
+        return True, 'MoveGroup joint goal succeeded'
 
     def _move_to_pose(self, target: PoseStamped, timeout_sec: float = 15.0) -> tuple[bool, str]:
         if not self._move_group_client.wait_for_server(timeout_sec=5.0):
@@ -242,6 +475,9 @@ class ManipulationNode(Node):
         goal = GripperCommand.Goal()
         goal.command.position   = position
         goal.command.max_effort = max_effort
+        self.get_logger().info(
+            f'Commanding gripper to position={position:.3f}, max_effort={max_effort:.1f}'
+        )
 
         event = threading.Event()
         result_holder = [None]
@@ -250,11 +486,28 @@ class ManipulationNode(Node):
             result_holder[0] = future.result()
             event.set()
 
+        def goal_response_cb(future):
+            goal_handle = future.result()
+            if not goal_handle.accepted:
+                self.get_logger().error('Gripper goal was rejected')
+                event.set()
+                return
+            goal_handle.get_result_async().add_done_callback(done_cb)
+
         future = self._gripper_client.send_goal_async(goal)
-        future.add_done_callback(lambda f: f.result().get_result_async().add_done_callback(done_cb))
+        future.add_done_callback(goal_response_cb)
         event.wait(timeout=timeout_sec)
 
-        return result_holder[0] is not None
+        if result_holder[0] is None:
+            self.get_logger().error('Gripper command timed out or was rejected')
+            return False
+
+        result = result_holder[0].result
+        self.get_logger().info(
+            f'Gripper result: position={result.position:.3f}, '
+            f'effort={result.effort:.3f}, stalled={result.stalled}, reached_goal={result.reached_goal}'
+        )
+        return result.reached_goal or result.stalled
 
     def _abort(self, goal_handle, message: str):
         self.get_logger().error(message)
@@ -268,6 +521,27 @@ class ManipulationNode(Node):
         msg = Bool()
         msg.data = grasped
         self.grasp_state_publisher.publish(msg)
+
+
+def _rotate_vector(q: Quaternion, v: Vector3) -> Vector3:
+    # q * v * q^-1, expanded for a unit quaternion.
+    x = v.x
+    y = v.y
+    z = v.z
+    qx = q.x
+    qy = q.y
+    qz = q.z
+    qw = q.w
+
+    tx = 2.0 * (qy * z - qz * y)
+    ty = 2.0 * (qz * x - qx * z)
+    tz = 2.0 * (qx * y - qy * x)
+
+    rotated = Vector3()
+    rotated.x = x + qw * tx + (qy * tz - qz * ty)
+    rotated.y = y + qw * ty + (qz * tx - qx * tz)
+    rotated.z = z + qw * tz + (qx * ty - qy * tx)
+    return rotated
 
 
 def main(args=None) -> None:

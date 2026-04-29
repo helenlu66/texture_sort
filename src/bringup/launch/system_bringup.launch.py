@@ -20,7 +20,8 @@ def generate_launch_description() -> LaunchDescription:
 
     rs = params.get('external_depth_camera', {}).get('ros__parameters', {})
     kv = params.get('kinova_vision', {}).get('ros__parameters', {})
-    tf = params.get('wrist_camera_tf', {}).get('ros__parameters', {})
+    wrist_camera_tf = params.get('wrist_camera_tf', {}).get('ros__parameters', {})
+    grasp_point_tf = params.get('grasp_point_tf', {}).get('ros__parameters', {})
 
     rs_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -60,24 +61,40 @@ def generate_launch_description() -> LaunchDescription:
             ],
         ),
         Node(package='perception', executable='apriltag_overlay', name='apriltag_overlay', output='screen', parameters=[params_file]),
-        Node(package='rqt_image_view', executable='rqt_image_view', name='wrist_camera_view', output='screen', arguments=['/detections_image']),
-        Node(package='rqt_image_view', executable='rqt_image_view', name='external_camera_view', output='screen', arguments=['/external_camera/color/image_raw']),
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
-            name='wrist_cam_tf',
+            name='wrist_camera_tf',
             output='screen',
             arguments=[
-                '--x',     str(tf.get('x', 0.0635)),
-                '--y',     str(tf.get('y', 0.0)),
-                '--z',     str(tf.get('z', 0.1397)),
-                '--roll',  str(tf.get('roll', 0.0)),
-                '--pitch', str(tf.get('pitch', 0.0)),
-                '--yaw',   str(tf.get('yaw', 0.0)),
-                '--frame-id',       str(tf.get('parent_frame', 'tool_frame')),
-                '--child-frame-id', str(tf.get('child_frame', 'wrist_camera_color_optical_frame')),
+                str(wrist_camera_tf.get('x', 0.0)),
+                str(wrist_camera_tf.get('y', 0.05639)),
+                str(wrist_camera_tf.get('z', -0.00305)),
+                str(wrist_camera_tf.get('roll', 3.141592653589793)),
+                str(wrist_camera_tf.get('pitch', 3.141592653589793)),
+                str(wrist_camera_tf.get('yaw', 0.0)),
+                str(wrist_camera_tf.get('parent_frame', 'end_effector_link')),
+                str(wrist_camera_tf.get('child_frame', 'camera_color_frame')),
             ],
         ),
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='grasp_point_tf',
+            output='screen',
+            arguments=[
+                str(grasp_point_tf.get('x', 0.0)),
+                str(grasp_point_tf.get('y', 0.0)),
+                str(grasp_point_tf.get('z', 0.12)),
+                str(grasp_point_tf.get('roll', 0.0)),
+                str(grasp_point_tf.get('pitch', 0.0)),
+                str(grasp_point_tf.get('yaw', 0.0)),
+                str(grasp_point_tf.get('parent_frame', 'end_effector_link')),
+                str(grasp_point_tf.get('child_frame', 'grasp_point')),
+            ],
+        ),
+        Node(package='rqt_image_view', executable='rqt_image_view', name='wrist_camera_view', output='screen', arguments=['/detections_image']),
+        Node(package='rqt_image_view', executable='rqt_image_view', name='external_camera_view', output='screen', arguments=['/external_camera/color/image_raw']),
         Node(package='manipulation', executable='manipulation_node', name='manipulation_node', output='screen', parameters=[params_file]),
         # Node(package='perception', executable='external_cam_node', name='external_cam_node', output='screen', parameters=[params_file]),
         # Node(package='perception', executable='tactile_node', name='tactile_node', output='screen'),

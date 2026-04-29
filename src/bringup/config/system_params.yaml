@@ -31,9 +31,10 @@ kinova_vision:
   ros__parameters:
     device: 192.168.1.10
     camera: wrist_camera
-    color_frame_id: wrist_camera_color_optical_frame
+    color_frame_id: camera_color_frame
     launch_color: 'true'
     launch_depth: 'false'
+    publish_tf: 'false'
     color_rtsp_element_config: color latency=200
 
 manipulation_node:
@@ -44,21 +45,38 @@ manipulation_node:
     move_group: manipulator
     vel_scale: 0.3
     accel_scale: 0.3
+    grasp_z_offset: 0.00
+    approach_height: 0.12
+    gripper_closed_position: 0.79
+    grasp_point_offset_x: 0.0
+    grasp_point_offset_y: 0.0
+    grasp_point_offset_z: 0.12
+    pre_grasp_path: ''
 
 apriltag:
   ros__parameters:
     size: 0.05
 
-# Static transform from tool_frame to wrist_camera_color_optical_frame.
-# x: in front of EE (along approach axis), z: above EE (along arm axis).
-# Rotation defaults to 0 — refine with easy_handeye2 calibration.
+# camera_color_frame is published by robot_state_publisher via kortex_control (vision:=true)
+
 wrist_camera_tf:
   ros__parameters:
     parent_frame: end_effector_link
-    child_frame: wrist_camera_color_optical_frame
-    x: 0.0635
+    child_frame: camera_color_frame
+    x: 0.0
+    y: 0.05639
+    z: -0.00305
+    roll: 3.141592653589793
+    pitch: 0.0
+    yaw: 0.0
+
+grasp_point_tf:
+  ros__parameters:
+    parent_frame: end_effector_link
+    child_frame: grasp_point
+    x: 0.0
     y: 0.0
-    z: 0.1397
+    z: 0.12
     roll: 0.0
     pitch: 0.0
     yaw: 0.0
@@ -70,6 +88,5 @@ apriltag_overlay:
     detections_topic: apriltag/detections
     overlay_topic: /detections_image
     grounding_topic: /groundings
-    tag_size: 0.05
+    tag_size: 0.04064
     ee_frame: end_effector_link
-
