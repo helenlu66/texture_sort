@@ -70,26 +70,25 @@ class AprilTagOverlay(Node):
         if self.camera_matrix is None:
             return None
 
-        # Decompose the homography using camera intrinsics to get 3D pose.
-        # The apriltag homography maps tag-plane coords (range -1..1) to image pixels.
-        H = np.array(det.homography, dtype=np.float64).reshape(3, 3)
-        K_inv = np.linalg.inv(self.camera_matrix)
-        H_norm = K_inv @ H
-
-        scale = (np.linalg.norm(H_norm[:, 0]) + np.linalg.norm(H_norm[:, 1])) / 2.0
-        if scale < 1e-6:
+        corners_2d = np.array([[c.x, c.y] for c in det.corners], dtype=np.float32)
+        if corners_2d.shape != (4, 2):
             return None
-        H_norm /= scale
 
-        r1 = H_norm[:, 0]
-        r2 = H_norm[:, 1]
-        r3 = np.cross(r1, r2)
-        rot_mat = np.column_stack([r1, r2, r3])
-        U, _, Vt = np.linalg.svd(rot_mat)
-        rot_mat = U @ Vt
+        dist_coeffs = self.dist_coeffs
+        if dist_coeffs is not None and dist_coeffs.size == 0:
+            dist_coeffs = None
 
-        # Translation scaled from homography units (-1..1) to meters
-        tvec = H_norm[:, 2] * (self.tag_size / 2.0)
+        ok, rvec, tvec = cv2.solvePnP(
+            self.tag_corners_3d,
+            corners_2d,
+            self.camera_matrix,
+            dist_coeffs,
+            flags=cv2.SOLVEPNP_ITERATIVE,
+        )
+        if not ok:
+            return None
+
+        rot_mat, _ = cv2.Rodrigues(rvec)
         q = _rot_to_quat(rot_mat)
 
         pose = PoseStamped()
