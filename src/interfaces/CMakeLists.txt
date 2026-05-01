@@ -31,6 +31,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/ExecutePlace.action"
   "action/GoToPrePose.action"
   "action/LoadObjectIntoBox.action"
+  "action/Deliver.action"
+  "action/Return.action"
   DEPENDENCIES action_msgs builtin_interfaces geometry_msgs sensor_msgs std_msgs std_srvs
 )
 

@@ -1,0 +1,6 @@
+# No goal fields for now; the delivery node uses its saved/default route.
+---
+bool success
+string message
+---
+string state

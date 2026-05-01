@@ -1,4 +1,5 @@
 int32 object_id
+bool save_img
 ---
 bool success
 string message

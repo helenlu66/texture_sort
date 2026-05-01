@@ -1,0 +1,6 @@
+# No goal fields for now; the delivery node returns to its saved/default loading pose.
+---
+bool success
+string message
+---
+string state
