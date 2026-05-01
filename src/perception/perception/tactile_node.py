@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 from typing import Optional
 
 import rclpy
@@ -27,6 +28,7 @@ class TactileNode(Node):
         self.latest_grasp_state: bool = False
         self._captured_images: dict[int, Image] = {}
         self._bridge = CvBridge()
+        self._capture_dir = Path('/home/helenlu/texture_sort/src/perception/perception/captured_texture')
 
         ref_dir = Path(__file__).parent
         self._refs = load_refs(ref_dir)
@@ -47,9 +49,28 @@ class TactileNode(Node):
             response.message = 'No gelsight image available.'
             return response
         self._captured_images[request.object_id] = self.latest_tactile_image
-        self.get_logger().info(f'Captured tactile image for object {request.object_id}.')
+        message = f'Captured tactile image for object {request.object_id}.'
+        if request.save_img:
+            try:
+                self._capture_dir.mkdir(parents=True, exist_ok=True)
+                query_bgr = self._bridge.imgmsg_to_cv2(
+                    self.latest_tactile_image,
+                    desired_encoding='bgr8',
+                )
+                timestamp = time.strftime('%Y%m%d_%H%M%S')
+                stamp_ns = self.get_clock().now().nanoseconds % 1_000_000_000
+                path = self._capture_dir / f'{request.object_id}_{timestamp}_{stamp_ns:09d}.png'
+                if not cv2.imwrite(str(path), query_bgr):
+                    raise RuntimeError(f'cv2.imwrite returned false for {path}')
+                message = f'{message} Saved to {path}.'
+            except Exception as e:
+                response.success = False
+                response.message = f'Captured tactile image but failed to save: {e}'
+                return response
+
+        self.get_logger().info(message)
         response.success = True
-        response.message = f'Captured tactile image for object {request.object_id}.'
+        response.message = message
         return response
 
     def handle_classify_texture(self, request, response):

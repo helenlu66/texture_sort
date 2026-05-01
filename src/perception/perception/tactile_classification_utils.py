@@ -8,9 +8,12 @@ import numpy as np
 TEXTURE_CLASSES = [
     (1, 'texture1_dense'),
     (2, 'texture2_smooth'),
+    (3, 'texture3_square'),
 ]
 
 REF_SIZE = (320, 240)  # OpenCV resize order: (width, height)
+NN_IMG_SIZE = (224, 224)
+NN_MODEL_PATH = Path(__file__).with_name('tactile_resnet_nn.pt')
 
 # Primary decision thresholds — sit in the clean gap between class distributions:
 #   class 1 (dense)  bv: [185.8, 227.1]   tc: [0.897, 0.943]
@@ -28,6 +31,21 @@ BLOCK_VARIANCE_WEIGHT = 0.5
 TEXTURE_COVERAGE_WEIGHT = 0.4
 DENSE_CLASS_ID = 1
 SMOOTH_CLASS_ID = 2
+
+try:
+    import torch
+    import torchvision.models as tvm
+    import torchvision.transforms as tvt
+    _TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    tvm = None
+    tvt = None
+    _TORCH_AVAILABLE = False
+
+_NN_MODEL = None
+_NN_EXTRACTOR = None
+_NN_ARTIFACT = None
 
 
 def gradient_feature(gray: np.ndarray) -> np.ndarray:
@@ -102,6 +120,78 @@ class ClassRefs:
 
 def load_refs(base_dir: Path) -> list[ClassRefs]:
     return [ClassRefs(class_id, base_dir / folder) for class_id, folder in TEXTURE_CLASSES]
+
+
+class _ResNetFeatureMLP(torch.nn.Module if _TORCH_AVAILABLE else object):
+    def __init__(self, input_dim: int, hidden_dim: int, num_classes: int, dropout: float) -> None:
+        super().__init__()
+        self.net = torch.nn.Sequential(
+            torch.nn.Linear(input_dim, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(dropout),
+            torch.nn.Linear(hidden_dim, num_classes),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
+def _build_resnet_extractor():
+    model = tvm.resnet18(weights=tvm.ResNet18_Weights.IMAGENET1K_V1)
+    model = torch.nn.Sequential(*list(model.children())[:-1])
+    model.eval()
+    transform = tvt.Compose([
+        tvt.ToPILImage(),
+        tvt.Resize(NN_IMG_SIZE),
+        tvt.ToTensor(),
+        tvt.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    def extract(bgr: np.ndarray) -> np.ndarray:
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        tensor = transform(rgb).unsqueeze(0)
+        with torch.no_grad():
+            feat = model(tensor).squeeze().numpy()
+        return feat.astype(np.float32)
+
+    return extract
+
+
+def _load_nn_classifier(model_path: Path = NN_MODEL_PATH):
+    global _NN_MODEL, _NN_EXTRACTOR, _NN_ARTIFACT
+    if _NN_MODEL is not None and _NN_EXTRACTOR is not None and _NN_ARTIFACT is not None:
+        return _NN_MODEL, _NN_EXTRACTOR, _NN_ARTIFACT
+    if not _TORCH_AVAILABLE:
+        raise RuntimeError('torch/torchvision are not importable')
+    if not model_path.exists():
+        raise RuntimeError(f'model file not found: {model_path}')
+
+    artifact = torch.load(model_path, map_location='cpu', weights_only=False)
+    model = _ResNetFeatureMLP(
+        input_dim=int(artifact['input_dim']),
+        hidden_dim=int(artifact['hidden_dim']),
+        num_classes=int(artifact['num_classes']),
+        dropout=float(artifact.get('dropout', 0.0)),
+    )
+    model.load_state_dict(artifact['model_state_dict'])
+    model.eval()
+
+    _NN_MODEL = model
+    _NN_EXTRACTOR = _build_resnet_extractor()
+    _NN_ARTIFACT = artifact
+    return _NN_MODEL, _NN_EXTRACTOR, _NN_ARTIFACT
+
+
+def classify_texture_with_nn(query_bgr: np.ndarray, model_path: Path = NN_MODEL_PATH) -> int:
+    model, extract_fn, artifact = _load_nn_classifier(model_path)
+    feat = extract_fn(query_bgr)
+    mean = np.asarray(artifact['feature_mean'], dtype=np.float32)
+    std = np.asarray(artifact['feature_std'], dtype=np.float32)
+    x = torch.tensor((feat - mean) / std, dtype=torch.float32).unsqueeze(0)
+    with torch.no_grad():
+        pred_index = int(model(x).argmax(dim=1).item())
+    index_to_class = artifact['index_to_class']
+    return int(index_to_class[pred_index])
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +322,7 @@ def texture_scores(query_bgr: np.ndarray, refs: list[ClassRefs]) -> dict[int, di
     }
 
 
-def classify_texture(query_bgr: np.ndarray, refs: list[ClassRefs]) -> int:
+def _classify_texture_heuristic(query_bgr: np.ndarray, refs: list[ClassRefs]) -> int:
     """Return the class_id that best matches query_bgr.
 
     OR logic: class 1 (dense) if bv >= BV_THRESH OR tc >= TC_THRESH, else class 2 (smooth).
@@ -246,3 +336,9 @@ def classify_texture(query_bgr: np.ndarray, refs: list[ClassRefs]) -> int:
     if bv >= BV_THRESH or tc >= TC_THRESH:
         return DENSE_CLASS_ID
     return SMOOTH_CLASS_ID
+
+
+def classify_texture(query_bgr: np.ndarray, refs: list[ClassRefs], use_nn: bool = True) -> int:
+    if use_nn:
+        return classify_texture_with_nn(query_bgr)
+    return _classify_texture_heuristic(query_bgr, refs)

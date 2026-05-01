@@ -1,0 +1,47 @@
+{
+  "model_out": "src/perception/perception/tactile_resnet_nn.pt",
+  "backend": "ResNet-18 avgpool (512-d)",
+  "samples": 390,
+  "train_samples": 312,
+  "val_samples": 6,
+  "augment": true,
+  "class_ids": [
+    1,
+    2,
+    3
+  ],
+  "best_val_acc": 1.0,
+  "best_epoch": 1,
+  "val_predictions": [
+    {
+      "name": "screenshot_20260429_194606",
+      "true_class": 1,
+      "predicted_class": 1
+    },
+    {
+      "name": "screenshot_20260429_193758",
+      "true_class": 2,
+      "predicted_class": 2
+    },
+    {
+      "name": "screenshot_20260429_194427",
+      "true_class": 3,
+      "predicted_class": 3
+    },
+    {
+      "name": "screenshot_20260429_194727",
+      "true_class": 1,
+      "predicted_class": 1
+    },
+    {
+      "name": "screenshot_20260429_194350",
+      "true_class": 3,
+      "predicted_class": 3
+    },
+    {
+      "name": "screenshot_20260429_193739",
+      "true_class": 2,
+      "predicted_class": 2
+    }
+  ]
+}

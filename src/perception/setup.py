@@ -11,7 +11,13 @@ setup(
         ('share/' + package_name, ['package.xml']),
     ],
     package_data={
-        'perception': ['texture1_dense/*.png', 'texture3_square/*.png'],
+        'perception': [
+            'texture1_dense/*.png',
+            'texture2_smooth/*.png',
+            'texture3_square/*.png',
+            'tactile_resnet_nn.pt',
+            'tactile_resnet_nn.json',
+        ],
     },
     install_requires=['setuptools'],
     zip_safe=True,
