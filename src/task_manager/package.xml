@@ -13,6 +13,7 @@
   <depend>std_srvs</depend>
   <depend>action_msgs</depend>
   <depend>interfaces</depend>
+  <depend>yasmin</depend>
 
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
