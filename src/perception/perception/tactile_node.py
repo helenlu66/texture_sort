@@ -5,7 +5,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import Bool
 from interfaces.msg import TextureClassification
-from interfaces.srv import ClassifyTexture
+from interfaces.srv import ClassifyTexture, CaptureTactileImage
 
 
 class TactileNode(Node):
@@ -13,17 +13,32 @@ class TactileNode(Node):
         super().__init__('tactile_node')
         self.latest_tactile_image: Optional[Image] = None
         self.latest_grasp_state: bool = False
-        self.create_subscription(Image, '/gelsight/image', self._gelsight_callback, 10)
+        self._captured_images: dict[int, Image] = {}
+
+        self.create_subscription(Image, '/gelsight/image_raw', self._gelsight_callback, 10)
         self.create_subscription(Bool, '/grasp_state', self._grasp_state_callback, 10)
         self.texture_class_publisher = self.create_publisher(TextureClassification, '/texture_class', 10)
         self.create_service(ClassifyTexture, '/classify_texture', self.handle_classify_texture)
+        self.create_service(CaptureTactileImage, '/capture_tactile_image', self._handle_capture)
         self.get_logger().info('tactile_node ready')
 
+    def _handle_capture(self, request, response):
+        """Snapshot the current gelsight frame and store it for the given object_id."""
+        if self.latest_tactile_image is None:
+            response.success = False
+            response.message = 'No gelsight image available.'
+            return response
+        self._captured_images[request.object_id] = self.latest_tactile_image
+        self.get_logger().info(f'Captured tactile image for object {request.object_id}.')
+        response.success = True
+        response.message = f'Captured tactile image for object {request.object_id}.'
+        return response
 
     def handle_classify_texture(self, request, response):
-        if not self._pinch_ready():
+        image = self._captured_images.get(request.object_id, self.latest_tactile_image)
+        if image is None:
             response.success = False
-            response.message = 'Grasp is not stable or tactile image unavailable.'
+            response.message = f'No tactile image available for object {request.object_id}.'
             response.texture_class = -1
             return response
         class_id = request.object_id % 3
@@ -47,9 +62,6 @@ class TactileNode(Node):
         msg.success = True
         msg.note = 'Stub tactile classifier output.'
         self.texture_class_publisher.publish(msg)
-
-    def _pinch_ready(self) -> bool:
-        return self.latest_tactile_image is not None and self.latest_grasp_state
 
 
 def main(args=None) -> None:

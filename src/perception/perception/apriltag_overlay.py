@@ -28,6 +28,7 @@ class AprilTagOverlay(Node):
         self.declare_parameter('overlay_topic', '/detections_image')
         self.declare_parameter('grounding_topic', '/groundings')
         self.declare_parameter('tag_size', 0.05)
+        self.declare_parameter('tag_size_overrides', [10.0, 0.12])  # flat list: [id, size_m, id, size_m, ...]
         self.declare_parameter('ee_frame', 'tool_frame')
 
         image_topic = str(self.get_parameter('image_topic').value)
@@ -38,16 +39,13 @@ class AprilTagOverlay(Node):
         self.tag_size = float(self.get_parameter('tag_size').value)
         self.ee_frame = str(self.get_parameter('ee_frame').value)
 
+        overrides = list(self.get_parameter('tag_size_overrides').value)
+        self._tag_size_map: dict[int, float] = {}
+        for i in range(0, len(overrides) - 1, 2):
+            self._tag_size_map[int(overrides[i])] = float(overrides[i + 1])
+
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
-
-        h = self.tag_size / 2.0
-        self.tag_corners_3d = np.array([
-            [-h, -h, 0.0],
-            [ h, -h, 0.0],
-            [ h,  h, 0.0],
-            [-h,  h, 0.0],
-        ], dtype=np.float32)
 
         self.create_subscription(Image, image_topic, self.image_callback, qos_profile_sensor_data)
         self.create_subscription(CameraInfo, camera_info_topic, self._camera_info_callback, qos_profile_sensor_data)
@@ -66,6 +64,16 @@ class AprilTagOverlay(Node):
     def detections_callback(self, msg):
         self.latest_detections = msg
 
+    def _corners_3d(self, tag_id: int) -> np.ndarray:
+        size = self._tag_size_map.get(tag_id, self.tag_size)
+        h = size / 2.0
+        return np.array([
+            [-h, -h, 0.0],
+            [ h, -h, 0.0],
+            [ h,  h, 0.0],
+            [-h,  h, 0.0],
+        ], dtype=np.float32)
+
     def get_grounding(self, det, stamp) -> PoseStamped | None:
         if self.camera_matrix is None:
             return None
@@ -79,7 +87,7 @@ class AprilTagOverlay(Node):
             dist_coeffs = None
 
         ok, rvec, tvec = cv2.solvePnP(
-            self.tag_corners_3d,
+            self._corners_3d(det.id),
             corners_2d,
             self.camera_matrix,
             dist_coeffs,

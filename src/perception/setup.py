@@ -22,5 +22,6 @@ setup(
             'apriltag_overlay = perception.apriltag_overlay:main',
             'tactile_node = perception.tactile_node:main',
             'kinova_rtsp_bridge = perception.kinova_rtsp_bridge:main',
+            'gelsight_node = perception.gelsight_node:main',
     ]},
 )
