@@ -9,7 +9,11 @@ from std_msgs.msg import Bool
 from cv_bridge import CvBridge
 from interfaces.msg import TextureClassification
 from interfaces.srv import ClassifyTexture, CaptureTactileImage
-from perception.tactile_classification_utils import classify_texture, load_refs, texture_scores
+from perception.tactile_classification_utils import (
+    classify_texture, load_refs, texture_scores,
+    block_variance, texture_coverage, REF_SIZE, BV_THRESH, TC_THRESH,
+)
+import cv2
 
 
 # ---------------------------------------------------------------------------
@@ -57,16 +61,11 @@ class TactileNode(Node):
             return response
 
         query_bgr = self._bridge.imgmsg_to_cv2(image_msg, desired_encoding='bgr8')
-        scores = texture_scores(query_bgr, self._refs)
+        gray = cv2.cvtColor(cv2.resize(query_bgr, REF_SIZE), cv2.COLOR_BGR2GRAY)
+        bv = block_variance(gray)
+        tc = texture_coverage(gray)
         self.get_logger().info(
-            'Texture classifier scores: ' +
-            ', '.join(
-                f'class {class_id}: combined={parts["combined"]:.4f}, '
-                f'ncc={parts["ncc"]:.4f}, bv={parts["block_variance_score"]:.4f}, '
-                f'coverage={parts["texture_coverage"]:.4f}, '
-                f'query_coverage={parts["query_texture_coverage"]:.4f}'
-                for class_id, parts in sorted(scores.items())
-            )
+            f'Query features: bv={bv:.1f} (thresh={BV_THRESH}), tc={tc:.3f} (thresh={TC_THRESH})'
         )
         class_id = classify_texture(query_bgr, self._refs)
 

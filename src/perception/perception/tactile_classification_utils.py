@@ -7,17 +7,27 @@ import numpy as np
 # (class_id, folder_name) pairs; extend to add more texture classes.
 TEXTURE_CLASSES = [
     (1, 'texture1_dense'),
-    (3, 'texture3_square'),
+    (2, 'texture2_smooth'),
 ]
 
 REF_SIZE = (320, 240)  # OpenCV resize order: (width, height)
+
+# Primary decision thresholds — sit in the clean gap between class distributions:
+#   class 1 (dense)  bv: [185.8, 227.1]   tc: [0.897, 0.943]
+#   class 2 (smooth) bv: [5.5,   27.5]    tc: [0.000, 0.033]
+#   bv gap: [27.5, 185.8] → threshold 100
+#   tc gap: [0.033, 0.897] → threshold 0.5
+# OR logic: class 1 if EITHER feature exceeds its threshold.
+# This tolerates partial contact degrading one feature while the other stays strong.
+BV_THRESH = 100.0
+TC_THRESH = 0.5
+
+# Retained for the combined-score fallback (both features in the ambiguous zone).
 NCC_WEIGHT = 0.1
-BLOCK_VARIANCE_WEIGHT = 0.3
-TEXTURE_COVERAGE_WEIGHT = 0.6
-DENSE_COVERAGE_THRESHOLD = 0.64
-SQUARE_COVERAGE_THRESHOLD = 0.35
+BLOCK_VARIANCE_WEIGHT = 0.5
+TEXTURE_COVERAGE_WEIGHT = 0.4
 DENSE_CLASS_ID = 1
-SQUARE_CLASS_ID = 3
+SMOOTH_CLASS_ID = 2
 
 
 def gradient_feature(gray: np.ndarray) -> np.ndarray:
@@ -82,6 +92,9 @@ class ClassRefs:
             self.texture_coverages.append(texture_coverage(gray))
         self.mean_block_variance = float(np.mean(self.block_variances)) if self.block_variances else 0.0
         self.mean_texture_coverage = float(np.mean(self.texture_coverages)) if self.texture_coverages else 0.0
+        # Medians are outlier-robust and used by the combined-score fallback.
+        self.median_block_variance = float(np.median(self.block_variances)) if self.block_variances else 0.0
+        self.median_texture_coverage = float(np.median(self.texture_coverages)) if self.texture_coverages else 0.0
 
     def __len__(self):
         return len(self.grad_features)
@@ -116,7 +129,7 @@ def _fit_pca(X: np.ndarray, n_components: int = 2) -> tuple[np.ndarray, np.ndarr
     """
     X = X - X.mean(axis=0)
     # economy SVD: X = U S Vt, principal components are rows of Vt
-    U, S, Vt = np.linalg.svd(X, full_matrices=False)
+    _, S, Vt = np.linalg.svd(X, full_matrices=False)
     X_proj = X @ Vt[:n_components].T
     total_variance = (S ** 2).sum()
     explained_ratio = (S[:n_components] ** 2) / (total_variance + 1e-12)
@@ -133,7 +146,6 @@ def visualize_pca(refs: list[ClassRefs], out_path: Path | None = None) -> None:
     class_ids = sorted({cr.class_id for cr in refs})
     palette = plt.cm.tab10.colors
     color_map = {cid: palette[i] for i, cid in enumerate(class_ids)}
-    label_map = {cr.class_id: cr.class_id for cr in refs}
 
     fig, ax = plt.subplots(figsize=(8, 6))
     for cid in class_ids:
@@ -221,11 +233,16 @@ def texture_scores(query_bgr: np.ndarray, refs: list[ClassRefs]) -> dict[int, di
 
 
 def classify_texture(query_bgr: np.ndarray, refs: list[ClassRefs]) -> int:
-    """Return the class_id that best matches query_bgr."""
-    scores = texture_scores(query_bgr, refs)
-    query_texture_coverage = next(iter(scores.values()))['query_texture_coverage']
-    if query_texture_coverage >= DENSE_COVERAGE_THRESHOLD:
+    """Return the class_id that best matches query_bgr.
+
+    OR logic: class 1 (dense) if bv >= BV_THRESH OR tc >= TC_THRESH, else class 2 (smooth).
+    The feature gap between classes is large enough that a single threshold on either
+    feature is sufficient; the OR rule tolerates partial contact degrading one feature.
+    """
+    query_gray = cv2.cvtColor(cv2.resize(query_bgr, REF_SIZE), cv2.COLOR_BGR2GRAY)
+    bv = block_variance(query_gray)
+    tc = texture_coverage(query_gray)
+
+    if bv >= BV_THRESH or tc >= TC_THRESH:
         return DENSE_CLASS_ID
-    if query_texture_coverage <= SQUARE_COVERAGE_THRESHOLD:
-        return SQUARE_CLASS_ID
-    return max(scores, key=lambda class_id: scores[class_id]['combined'])
+    return SMOOTH_CLASS_ID
