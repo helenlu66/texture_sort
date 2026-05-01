@@ -1,12 +1,20 @@
+from pathlib import Path
 from typing import Optional
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
 from std_msgs.msg import Bool
+from cv_bridge import CvBridge
 from interfaces.msg import TextureClassification
 from interfaces.srv import ClassifyTexture, CaptureTactileImage
+from perception.tactile_classification_utils import classify_texture, load_refs, texture_scores
 
+
+# ---------------------------------------------------------------------------
+# ROS node
+# ---------------------------------------------------------------------------
 
 class TactileNode(Node):
     def __init__(self) -> None:
@@ -14,8 +22,14 @@ class TactileNode(Node):
         self.latest_tactile_image: Optional[Image] = None
         self.latest_grasp_state: bool = False
         self._captured_images: dict[int, Image] = {}
+        self._bridge = CvBridge()
 
-        self.create_subscription(Image, '/gelsight/image_raw', self._gelsight_callback, 10)
+        ref_dir = Path(__file__).parent
+        self._refs = load_refs(ref_dir)
+        counts = {cr.class_id: len(cr) for cr in self._refs}
+        self.get_logger().info(f'Loaded reference images per class: {counts}')
+
+        self.create_subscription(Image, '/gelsight/image_raw', self._gelsight_callback, qos_profile_sensor_data)
         self.create_subscription(Bool, '/grasp_state', self._grasp_state_callback, 10)
         self.texture_class_publisher = self.create_publisher(TextureClassification, '/texture_class', 10)
         self.create_service(ClassifyTexture, '/classify_texture', self.handle_classify_texture)
@@ -35,16 +49,31 @@ class TactileNode(Node):
         return response
 
     def handle_classify_texture(self, request, response):
-        image = self._captured_images.get(request.object_id, self.latest_tactile_image)
-        if image is None:
+        image_msg = self._captured_images.get(request.object_id, self.latest_tactile_image)
+        if image_msg is None:
             response.success = False
             response.message = f'No tactile image available for object {request.object_id}.'
             response.texture_class = -1
             return response
-        class_id = request.object_id % 3
+
+        query_bgr = self._bridge.imgmsg_to_cv2(image_msg, desired_encoding='bgr8')
+        scores = texture_scores(query_bgr, self._refs)
+        self.get_logger().info(
+            'Texture classifier scores: ' +
+            ', '.join(
+                f'class {class_id}: combined={parts["combined"]:.4f}, '
+                f'ncc={parts["ncc"]:.4f}, bv={parts["block_variance_score"]:.4f}, '
+                f'coverage={parts["texture_coverage"]:.4f}, '
+                f'query_coverage={parts["query_texture_coverage"]:.4f}'
+                for class_id, parts in sorted(scores.items())
+            )
+        )
+        class_id = classify_texture(query_bgr, self._refs)
+
+        self.get_logger().info(f'Object {request.object_id} -> texture class {class_id}.')
         self._publish_texture_class(request.object_id, class_id)
         response.success = True
-        response.message = f'Assigned stub texture class {class_id} to object {request.object_id}.'
+        response.message = f'Object {request.object_id} is texture class {class_id}.'
         response.texture_class = class_id
         return response
 
@@ -60,7 +89,7 @@ class TactileNode(Node):
         msg.object_id = object_id
         msg.texture_class = class_id
         msg.success = True
-        msg.note = 'Stub tactile classifier output.'
+        msg.note = f'NCC+BV classifier — class {class_id}.'
         self.texture_class_publisher.publish(msg)
 
 
