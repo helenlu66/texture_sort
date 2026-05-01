@@ -8,3 +8,6 @@
 	path = src/third_party/kinova/ros2_kortex
 	url = https://github.com/Kinovarobotics/ros2_kortex.git
 	branch = jazzy
+[submodule "external/gsrobotics"]
+	path = external/gsrobotics
+	url = https://github.com/helenlu66/gsrobotics.git

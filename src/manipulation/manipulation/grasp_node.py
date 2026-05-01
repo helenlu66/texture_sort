@@ -18,6 +18,7 @@ from geometry_msgs.msg import (
 )
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
+from std_srvs.srv import Trigger
 from shape_msgs.msg import SolidPrimitive
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
@@ -30,7 +31,7 @@ from control_msgs.action import GripperCommand
 from tf2_ros import Buffer, TransformListener
 import tf2_geometry_msgs
 
-from interfaces.action import ExecuteGrasp
+from interfaces.action import ExecuteGrasp, GoToPrePose
 from interfaces.msg import ObjectGroundingArray
 
 
@@ -113,11 +114,17 @@ class GraspNode(Node):
             callback_group=self._action_callback_group,
         )
 
-        self.reset_action_server = ActionServer(
-            self,
-            ExecuteGrasp,
+        self.create_service(
+            Trigger,
             '/reset_grasp',
-            self.grasp_then_reset_callback,  # same sequence as grasp_then_reset but with open_back_up=True and lift=False
+            self._reset_grasp_service,
+            callback_group=self._action_callback_group,
+        )
+        ActionServer(
+            self,
+            GoToPrePose,
+            '/go_to_pre_grasp',
+            self._go_to_pre_grasp_callback,
             callback_group=self._action_callback_group,
         )
         
@@ -165,36 +172,34 @@ class GraspNode(Node):
         r.message = message
         return r
 
-    def reset_grasp_callback(self, goal_handle):
-        """Opens the gripper, returs to the approach height, and returns to the pre-grasp pose"""
-        # open the gripper
+    def _reset_grasp_service(self, request, response):
+        """Opens the gripper, lifts to approach height, and returns to pre-grasp pose."""
         if not self._gripper_cmd(self._gripper_open_position):
-            return self._abort(goal_handle, 'Gripper open command failed.')
-        
-        # go back up to the approach height. It's the current gripper pose with z = approach height
+            response.success = False
+            response.message = 'Gripper open command failed.'
+            return response
+
         current_ee_tf = self.tf_buffer.lookup_transform(
-            self._base_frame,
-            self._ee_link,
-            rclpy.time.Time(),
-            timeout=rclpy.duration.Duration(seconds=1.0),
+            self._base_frame, self._ee_link,
+            rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=1.0),
         )
         approach_target = PoseStamped()
         approach_target.header = current_ee_tf.header
-        approach_target.pose = current_ee_tf.transform
+        approach_target.pose.position.x = current_ee_tf.transform.translation.x
+        approach_target.pose.position.y = current_ee_tf.transform.translation.y
         approach_target.pose.position.z = self._approach_height
+        approach_target.pose.orientation = current_ee_tf.transform.rotation
+
         moved, message = self._move_to_pose(approach_target)
         if not moved:
-            return self._abort(goal_handle, f'Approach motion failed: {message}')
-        
-        # return to pre-grasp pose
+            response.success = False
+            response.message = f'Lift motion failed: {message}'
+            return response
+
         returned, message = self.return_to_pre_grasp()
-        if not returned:
-            return self._abort(goal_handle, f'Failed to return to pre-grasp pose: {message}')
-        goal_handle.succeed()
-        r = ExecuteGrasp.Result()
-        r.success = True
-        r.message = 'Grasp reset successful.'
-        return r
+        response.success = returned
+        response.message = 'Grasp reset successful.' if returned else f'Return to pre-grasp failed: {message}'
+        return response
 
 
     def execute_grasp_callback(self, goal_handle):
@@ -432,16 +437,64 @@ class GraspNode(Node):
         if self._pre_grasp_path:
             return Path(self._pre_grasp_path).expanduser()
 
-        share_path = Path(get_package_share_directory('manipulation')) / 'pre_grasp.json'
+        share_path = Path(get_package_share_directory('manipulation')) / 'pre_grasp_high.json'
         if share_path.exists():
             return share_path
 
-        return Path(__file__).resolve().parents[1] / 'pre_grasp.json'
+        return Path(__file__).resolve().parents[1] / 'pre_grasp_high.json'
+
+    def _go_to_pre_grasp_callback(self, goal_handle):
+        def fb(state: str):
+            msg = GoToPrePose.Feedback()
+            msg.state = state
+            goal_handle.publish_feedback(msg)
+            self.get_logger().info(f'[go_to_pre_grasp] {state}')
+
+        fb('loading_pre_grasp_pose')
+        pre_grasp_path = self._resolve_pre_grasp_path()
+        try:
+            with pre_grasp_path.open('r', encoding='utf-8') as f:
+                pre_grasp = json.load(f)
+        except Exception as e:
+            goal_handle.abort()
+            r = GoToPrePose.Result()
+            r.success = False
+            r.message = f'Failed to read {pre_grasp_path}: {e}'
+            return r
+
+        arm_joints = pre_grasp.get('arm_joints')
+        if not isinstance(arm_joints, dict) or not arm_joints:
+            goal_handle.abort()
+            r = GoToPrePose.Result()
+            r.success = False
+            r.message = f'No arm_joints found in {pre_grasp_path}'
+            return r
+
+        self.get_logger().info(
+            'Moving to pre_grasp: '
+            + ', '.join(f'{n}={v:.4f}' for n, v in arm_joints.items())
+        )
+        fb('moving_to_pre_grasp')
+        ok, message = self._move_to_joint_positions(arm_joints)
+        if not ok:
+            goal_handle.abort()
+            r = GoToPrePose.Result()
+            r.success = False
+            r.message = f'Move to pre_grasp failed: {message}'
+            return r
+
+        fb('done')
+        goal_handle.succeed()
+        r = GoToPrePose.Result()
+        r.success = True
+        r.message = 'Reached pre-grasp position.'
+        return r
 
     def _move_to_joint_positions(
         self,
         joint_positions: dict[str, float],
         timeout_sec: float = 20.0,
+        velocity_scale: Optional[float] = None,
     ) -> tuple[bool, str]:
         if not self._move_group_client.wait_for_server(timeout_sec=5.0):
             self.get_logger().error('MoveGroup action server not available')
@@ -451,7 +504,7 @@ class GraspNode(Node):
         req.group_name = self._move_group
         req.num_planning_attempts = 5
         req.allowed_planning_time = 5.0
-        req.max_velocity_scaling_factor = self._vel_scale
+        req.max_velocity_scaling_factor = self._vel_scale if velocity_scale is None else float(velocity_scale)
         req.max_acceleration_scaling_factor = self._accel_scale
 
         goal_constraints = Constraints()

@@ -1,0 +1,17 @@
+{
+  "description": "Neutral pose captured from /joint_states for returning after grasp attempts.",
+  "stamp": {
+    "sec": 1777414652,
+    "nanosec": 628901731
+  },
+  "frame_id": "base_link",
+  "arm_joints": {
+    "joint_1": -0.26434803296235554,
+    "joint_2": 0.1094036729106207,
+    "joint_3": 0.22085303636782894,
+    "joint_4": 1.5038423264614322,
+    "joint_5": -0.023145000401660454,
+    "joint_6": 1.50969102768941,
+    "joint_7": -1.6479710067598665
+  }
+}

@@ -1,0 +1,6 @@
+# No goal fields — the target pose is determined by the node's saved configuration.
+---
+bool success
+string message
+---
+string state

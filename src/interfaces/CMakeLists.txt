@@ -21,6 +21,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/InitializeSceneObjects.srv"
   "srv/DetectObjectPose.srv"
   "srv/ClassifyTexture.srv"
+  "srv/CaptureTactileImage.srv"
   "srv/CheckBaseReady.srv"
   "srv/StartSortAndDelivery.srv"
   "srv/GetNextCategory.srv"
@@ -28,6 +29,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MarkCategoryDelivered.srv"
   "action/ExecuteGrasp.action"
   "action/ExecutePlace.action"
+  "action/GoToPrePose.action"
   "action/LoadObjectIntoBox.action"
   DEPENDENCIES action_msgs builtin_interfaces geometry_msgs sensor_msgs std_msgs std_srvs
 )

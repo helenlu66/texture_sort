@@ -1,5 +1,5 @@
 int32 object_id
-int32 category_id
+geometry_msgs/PointStamped box_position  # optional: if frame_id is empty, detect from AprilTag
 ---
 bool success
 string message

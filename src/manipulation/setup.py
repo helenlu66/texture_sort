@@ -10,6 +10,10 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name, ['pre_grasp.json']),
+        ('share/' + package_name, ['pre_grasp_high.json']),
+        ('share/' + package_name, ['pre_load.json']),
+        ('share/' + package_name, ['pre_load_high.json']),
+        ('share/' + package_name, ['pre_load_sideways.json']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -19,6 +23,7 @@ setup(
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={'console_scripts': [
-            "grasp_node = manipulation.grasp_node:main"
+            "grasp_node = manipulation.grasp_node:main",
+            "place_node = manipulation.place_node:main",
     ]},
 )
