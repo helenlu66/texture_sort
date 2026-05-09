@@ -6,7 +6,7 @@ ROS 2 workspace for texture-based object sorting with a Kinova Gen3 arm and deli
 
 ## Texture Classes
 
-![Textured objects](textured_objects.png)
+![Textured objects](demo/textured_objects.png)
 
 | Color | Texture class |
 |---|---|
@@ -83,23 +83,23 @@ texture_sort/
 ---
 
 ## Task Sequence
-![Task Sequence](task_sequence.png)
+![Task Sequence](demo/task_sequence.png)
 
 **Texture classification**
 
-![Texture classification](tactile_classification_phase.gif)
+![Texture classification](demo/tactile_classification_phase.gif)
 
 **Load square-texture objects onto AVA**
 
-![Load square](load_square.gif)
+![Load square](demo/load_square.gif)
 
 **Load dense-texture objects onto AVA**
 
-![Load dense](load%20dense.gif)
+![Load dense](demo/load%20dense.gif)
 
 **Leave smooth-texture object on table**
 
-![Leave smooth](leave%20smooth.gif)
+![Leave smooth](demo/leave%20smooth.gif)
 
 ---
 
@@ -224,7 +224,7 @@ The task manager will classify each object on the table by texture, load the squ
 
 ## Data Collection
 
-![Data collection illustration](data_collection_illustration.png)
+![Data collection illustration](demo/data_collection_illustration.png)
 
 Images are collected by commanding the arm to grasp an object, press it against the GelSight sensor, and return to the pre-grasp pose — all in one action call. The saved PNGs land in `src/perception/perception/captured_texture/` and are used to train the tactile classifier.
 
@@ -247,4 +247,4 @@ Current model: 377 samples, ResNet-18 avgpool backbone, **96.6% accuracy** on th
 
 **Data collection demo**
 
-![Data collection](ROS2%20Data%20Collection.gif)
+![Data collection](demo/ROS2%20Data%20Collection.gif)
