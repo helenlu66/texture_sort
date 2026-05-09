@@ -85,6 +85,20 @@ texture_sort/
 ## Task Sequence
 ![Task Sequence](task_sequence.png)
 
+**Texture classification**
+<video src="tactile_classification_phase.mp4" controls width="640"></video>
+
+**Load square-texture objects onto AVA**
+<video src="load_square.mp4" controls width="640"></video>
+
+**Load dense-texture objects onto AVA**
+<video src="load%20dense.mp4" controls width="640"></video>
+
+**Leave smooth-texture object on table**
+<video src="leave%20smooth.mp4" controls width="640"></video>
+
+---
+
 ## Kinova Side — Installation
 
 **Prerequisite:** ROS 2 Jazzy installed and sourced.
@@ -226,3 +240,6 @@ The trained weights and evaluation metrics are stored in:
 - [src/perception/perception/tactile_resnet_nn.json](src/perception/perception/tactile_resnet_nn.json) — training config and per-class accuracy
 
 Current model: 377 samples, ResNet-18 avgpool backbone, **96.6% accuracy** on the held-out set (29 images, 3 classes).
+
+**Data collection demo**
+<video src="ROS2%20Data%20Collection.mp4" controls width="640"></video>
