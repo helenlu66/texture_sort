@@ -6,7 +6,7 @@ ROS 2 workspace for texture-based object sorting with a Kinova Gen3 arm and deli
 
 ## Texture Classes
 
-![Textured objects](textured_objects.jpg)
+![Textured objects](textured_objects.png)
 
 | Color | Texture class |
 |---|---|
