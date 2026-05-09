@@ -86,16 +86,16 @@ texture_sort/
 ![Task Sequence](task_sequence.png)
 
 **Texture classification**
-<video src="tactile_classification_phase.mp4" controls width="640"></video>
+<video src="tactile_classification_phase.mp4" controls width="320"></video>
 
 **Load square-texture objects onto AVA**
-<video src="load_square.mp4" controls width="640"></video>
+<video src="load_square.mp4" controls width="320"></video>
 
 **Load dense-texture objects onto AVA**
-<video src="load%20dense.mp4" controls width="640"></video>
+<video src="load%20dense.mp4" controls width="320"></video>
 
 **Leave smooth-texture object on table**
-<video src="leave%20smooth.mp4" controls width="640"></video>
+<video src="leave%20smooth.mp4" controls width="320"></video>
 
 ---
 
@@ -242,4 +242,4 @@ The trained weights and evaluation metrics are stored in:
 Current model: 377 samples, ResNet-18 avgpool backbone, **96.6% accuracy** on the held-out set (29 images, 3 classes).
 
 **Data collection demo**
-<video src="ROS2%20Data%20Collection.mp4" controls width="640"></video>
+<video src="ROS2%20Data%20Collection.mp4" controls width="320"></video>
