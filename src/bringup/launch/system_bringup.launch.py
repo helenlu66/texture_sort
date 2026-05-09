@@ -114,5 +114,4 @@ def generate_launch_description() -> LaunchDescription:
         Node(package='perception', executable='gelsight_node', name='gelsight_node', output='screen', parameters=[params_file]),
         Node(package='perception', executable='tactile_node', name='tactile_node', output='screen', parameters=[params_file]),
         Node(package='task_manager', executable='task_manager_node', name='task_manager_node', output='screen', parameters=[params_file, {'use_placeholder_delivery': False}]),
-        # Node(package='perception', executable='external_cam_node', name='external_cam_node', output='screen', parameters=[params_file]),
     ])

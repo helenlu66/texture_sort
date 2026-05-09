@@ -8,16 +8,6 @@ gelsight_node:
     frame_id: gelsight_frame
     fps: 25
 
-external_cam_node:
-  ros__parameters:
-    rgb_topic: /external_camera/color/image_raw
-    depth_topic: /external_camera/depth/image_rect_raw
-    camera_info_topic: /external_camera/color/camera_info
-    objects_topic: /external_objects
-    initialize_scene_service: /initialize_scene_objects
-    detect_object_pose_service: /detect_object_pose
-    frame_id: external_camera_color_optical_frame
-
 turtlebot_delivery_node:
   ros__parameters:
     loading_frame: map

@@ -27,7 +27,6 @@ setup(
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={'console_scripts': [
-            'external_cam_node = perception.vision_node:main',
             'apriltag_overlay = perception.apriltag_overlay:main',
             'tactile_node = perception.tactile_node:main',
             'gelsight_node = perception.gelsight_node:main',
