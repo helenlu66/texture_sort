@@ -55,7 +55,7 @@ kinova_vision:
     launch_color: 'true'
     launch_depth: 'false'
     publish_tf: 'false'
-    color_rtsp_element_config: color latency=200
+    color_rtsp_element_config: color latency=100
 
 place_node:
   ros__parameters:
