@@ -16,11 +16,6 @@ from perception.tactile_classification_utils import (
 )
 import cv2
 
-
-# ---------------------------------------------------------------------------
-# ROS node
-# ---------------------------------------------------------------------------
-
 class TactileNode(Node):
     def __init__(self) -> None:
         super().__init__('tactile_node')
@@ -43,13 +38,17 @@ class TactileNode(Node):
         self.get_logger().info('tactile_node ready')
 
     def _handle_capture(self, request, response):
-        """Snapshot the current gelsight frame and store it for the given object_id."""
+        """Snapshot the current gelsight frame and store it for the given object_id.
+        """
         if self.latest_tactile_image is None:
             response.success = False
             response.message = 'No gelsight image available.'
             return response
         self._captured_images[request.object_id] = self.latest_tactile_image
         message = f'Captured tactile image for object {request.object_id}.'
+
+        # save_img is optional since some callers just want to capture the image for later classification, and don't need to save it to disk.
+        # save_img can be set to true for debugging or dataset collection purposes.
         if request.save_img:
             try:
                 self._capture_dir.mkdir(parents=True, exist_ok=True)
@@ -88,6 +87,8 @@ class TactileNode(Node):
         self.get_logger().info(
             f'Query features: bv={bv:.1f} (thresh={BV_THRESH}), tc={tc:.3f} (thresh={TC_THRESH})'
         )
+
+        # currently uses the trained neural network classifier. Tried to do it with opencv but didn't work well enough
         class_id = classify_texture(query_bgr, self._refs)
 
         self.get_logger().info(f'Object {request.object_id} -> texture class {class_id}.')
