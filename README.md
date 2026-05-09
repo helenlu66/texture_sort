@@ -86,15 +86,19 @@ texture_sort/
 ![Task Sequence](task_sequence.png)
 
 **Texture classification**
+
 ![Texture classification](tactile_classification_phase.gif)
 
 **Load square-texture objects onto AVA**
+
 ![Load square](load_square.gif)
 
 **Load dense-texture objects onto AVA**
+
 ![Load dense](load%20dense.gif)
 
 **Leave smooth-texture object on table**
+
 ![Leave smooth](leave%20smooth.gif)
 
 ---
@@ -242,4 +246,5 @@ The trained weights and evaluation metrics are stored in:
 Current model: 377 samples, ResNet-18 avgpool backbone, **96.6% accuracy** on the held-out set (29 images, 3 classes).
 
 **Data collection demo**
+
 ![Data collection](ROS2%20Data%20Collection.gif)
