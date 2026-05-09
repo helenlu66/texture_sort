@@ -18,6 +18,7 @@ setup(
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={'console_scripts': [
-            "task_manager_node = task_manager.task_manager_node:main"
+            "task_manager_node = task_manager.task_manager_node:main",
+            "test_deliver_action = task_manager.test_deliver_action:main",
     ]},
 )

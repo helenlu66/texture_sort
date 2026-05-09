@@ -1,3 +1,13 @@
+gelsight_node:
+  ros__parameters:
+    device_index: 0
+    width: 320
+    height: 240
+    border_fraction: 0.15
+    image_topic: /gelsight/image_raw
+    frame_id: gelsight_frame
+    fps: 25
+
 external_cam_node:
   ros__parameters:
     rgb_topic: /external_camera/color/image_raw
@@ -16,6 +26,16 @@ turtlebot_delivery_node:
 task_manager_node:
   ros__parameters:
     number_of_texture_categories: 3
+    groundings_topic: /groundings
+    target_texture_class: -1
+    ignored_object_ids: [10]
+    action_timeout_sec: 90.0
+    service_timeout_sec: 10.0
+    classification_hold_seconds: 1.0
+    object_detection_settle_sec: 1.5
+    object_detection_timeout_sec: 30.0
+    box_detection_settle_sec: 1.0
+    arm_stabilize_sec: 1.0
 
 
 external_depth_camera:
@@ -37,25 +57,55 @@ kinova_vision:
     publish_tf: 'false'
     color_rtsp_element_config: color latency=200
 
-manipulation_node:
+place_node:
   ros__parameters:
     groundings_topic: /groundings
     base_frame: base_link
     ee_link: end_effector_link
     move_group: manipulator
     vel_scale: 0.3
+    lower_vel_scale: 0.1
+    accel_scale: 0.3
+    loading_height: 0.15
+    gripper_open_position: 0.0
+    grasp_point_offset_x: -0.0285
+    grasp_point_offset_y: 0.0
+    grasp_point_offset_z: 0.135
+    pre_load_path: ''
+    arm_stabilize_sec: 1.0
+    object_detection_settle_sec: 1.5
+
+grasp_node:
+  ros__parameters:
+    groundings_topic: /groundings
+    base_frame: base_link
+    ee_link: end_effector_link
+    move_group: manipulator
+    vel_scale: 0.3
+    lower_vel_scale: 0.1
     accel_scale: 0.3
     grasp_z_offset: 0.00
     approach_height: 0.12
-    gripper_closed_position: 0.79
-    grasp_point_offset_x: 0.0
+    gripper_closed_position: 0.405 # closed position with the GelSight sensor attached
+    gripper_open_position: 0.0
+    grasp_point_offset_x: -0.025
     grasp_point_offset_y: 0.0
-    grasp_point_offset_z: 0.12
+    grasp_point_offset_z: 0.13
     pre_grasp_path: ''
+    grasp_hold_seconds: 2.0
+    arm_stabilize_sec: 1.0
+    object_detection_settle_sec: 1.5
 
 apriltag:
   ros__parameters:
     size: 0.05
+
+wrist_camera_qos_relay:
+  ros__parameters:
+    input_image_topic: /wrist_camera/color/image_raw
+    input_camera_info_topic: /wrist_camera/color/camera_info
+    output_image_topic: /wrist_camera/color/image_raw_best_effort
+    output_camera_info_topic: /wrist_camera/color/camera_info_best_effort
 
 # camera_color_frame is published by robot_state_publisher via kortex_control (vision:=true)
 
@@ -76,17 +126,18 @@ grasp_point_tf:
     child_frame: grasp_point
     x: 0.0
     y: 0.0
-    z: 0.12
+    z: 0.127
     roll: 0.0
     pitch: 0.0
     yaw: 0.0
 
 apriltag_overlay:
   ros__parameters:
-    image_topic: /wrist_camera/color/image_raw
-    camera_info_topic: /wrist_camera/color/camera_info
+    image_topic: /wrist_camera/color/image_raw_best_effort
+    camera_info_topic: /wrist_camera/color/camera_info_best_effort
     detections_topic: apriltag/detections
     overlay_topic: /detections_image
     grounding_topic: /groundings
-    tag_size: 0.04064
+    tag_size: 0.04064 # 0.034 
+    tag_size_overrides: [10.0, 0.12]  # tag_id, size_m pairs — tag 10 (box) is 0.12m
     ee_frame: end_effector_link

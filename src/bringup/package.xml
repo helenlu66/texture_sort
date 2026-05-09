@@ -12,8 +12,7 @@
   <depend>interfaces</depend>
   <depend>perception</depend>
   <depend>manipulation</depend>
-  <depend>navigation</depend>
-  <depend>task_manager</depend>
+<depend>task_manager</depend>
   <depend>rqt_image_view</depend>
   <depend>realsense2_camera</depend>
 

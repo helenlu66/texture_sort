@@ -1,3 +1,4 @@
+import time as _time
 from typing import Optional
 import rclpy
 import rclpy.duration
@@ -11,14 +12,16 @@ from tf2_ros import Buffer, TransformListener
 import tf2_geometry_msgs
 from yasmin import Blackboard, CbState, StateMachine
 
-from interfaces.action import Deliver, ExecuteGrasp, GoToPrePose, LoadObjectIntoBox, Return
+from interfaces.action import Delivery, ExecuteGrasp, GoToPrePose, LoadObjectIntoBox
 from interfaces.msg import ObjectGroundingArray, ObjectRecord, TaskState
+from std_srvs.srv import Trigger
 from interfaces.srv import ClassifyTexture, StartSortAndDelivery
 
 BOX_TAG_ID = 10
 
 
 # Delivery order: class 3 objects are loaded and delivered first, then class 1.
+# Class 2 objects are intentionally left undelivered.
 DELIVERY_ORDER = [3, 1]
 
 OUTCOME_NEXT = 'next'
@@ -37,16 +40,27 @@ class TaskManagerNode(Node):
         self.declare_parameter('ignored_object_ids', [10])
         self.declare_parameter('action_timeout_sec', 90.0)
         self.declare_parameter('service_timeout_sec', 10.0)
+        self.declare_parameter('object_detection_settle_sec', 3.0)
+        self.declare_parameter('object_detection_timeout_sec', 30.0)
+        self.declare_parameter('box_detection_settle_sec', 3.0)
+        self.declare_parameter('arm_stabilize_sec', 1.0)
+        self.declare_parameter('use_placeholder_delivery', False)
 
         groundings_topic = str(self.get_parameter('groundings_topic').value)
         self._ignored_ids = {int(i) for i in self.get_parameter('ignored_object_ids').value}
         self._action_timeout = float(self.get_parameter('action_timeout_sec').value)
         self._service_timeout = float(self.get_parameter('service_timeout_sec').value)
+        self._detection_settle_sec = float(self.get_parameter('object_detection_settle_sec').value)
+        self._detection_timeout_sec = float(self.get_parameter('object_detection_timeout_sec').value)
+        self._box_detection_settle_sec = float(self.get_parameter('box_detection_settle_sec').value)
+        self._arm_stabilize_sec = float(self.get_parameter('arm_stabilize_sec').value)
+        self._use_placeholder_delivery = bool(self.get_parameter('use_placeholder_delivery').value)
 
         self._callback_group = ReentrantCallbackGroup()
 
         # object_id → ObjectRecord (texture_class, delivered)
         self._records: dict[int, ObjectRecord] = {}
+        self._visible_grounding_ids: set[int] = set()
 
         # Last known box position in base_link, saved whenever tag 10 is seen.
         self._last_box_position: Optional[PointStamped] = None
@@ -65,13 +79,13 @@ class TaskManagerNode(Node):
         self._load_into_box = ActionClient(
             self, LoadObjectIntoBox, '/load_object_into_box', callback_group=self._callback_group)
         self._deliver = ActionClient(
-            self, Deliver, '/deliver', callback_group=self._callback_group)
-        self._return = ActionClient(
-            self, Return, '/return', callback_group=self._callback_group)
+            self, Delivery, '/deliver', callback_group=self._callback_group)
 
         # Service clients
         self._classify = self.create_client(
             ClassifyTexture, '/classify_texture', callback_group=self._callback_group)
+        self._open_gripper = self.create_client(
+            Trigger, '/open_gripper', callback_group=self._callback_group)
 
         self.create_subscription(
             ObjectGroundingArray, groundings_topic, self._groundings_callback, 10,
@@ -93,13 +107,14 @@ class TaskManagerNode(Node):
 
     def _handle_start(self, request, response):
         del request
-        for record in self._records.values():
-            record.texture_class = -1
-            record.classified = False
-            record.delivered = False
+        self._log_state('restart_requested')
+        self._records.clear()
+        self._last_box_position = None
+        self._sm = self._build_sm()
 
         bb = Blackboard()
         bb.object_ids = []
+        bb.all_object_ids = []
         bb.classify_idx = 0
         bb.current_object_id = -1
         bb.batches = []      # list[list[int]], indexed by DELIVERY_ORDER
@@ -125,17 +140,45 @@ class TaskManagerNode(Node):
         sm = StateMachine(outcomes=[OUTCOME_DONE, OUTCOME_FAILED])
 
         # --- Classification phase ---
+        sm.add_state('OPEN_GRIPPER',
+            CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_open_gripper),
+            {OUTCOME_NEXT: 'GO_TO_PRE_GRASP_FOR_OBJECT_MAPPING', OUTCOME_FAILED: OUTCOME_FAILED})
+
+        sm.add_state('GO_TO_PRE_GRASP_FOR_OBJECT_MAPPING',
+            CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_go_to_pre_grasp),
+            {OUTCOME_NEXT: 'STABILIZE_OBJECT_LOCATIONS_FOR_MAPPING', OUTCOME_FAILED: OUTCOME_FAILED})
+
+        sm.add_state('STABILIZE_OBJECT_LOCATIONS_FOR_MAPPING',
+            CbState([OUTCOME_NEXT], self._stabilize_object_locations),
+            {OUTCOME_NEXT: 'PREPARE_OBJECT_LIST'})
+
+        sm.add_state('GO_TO_PRE_LOAD_FOR_BOX_MAPPING',
+            CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_go_to_pre_load),
+            {OUTCOME_NEXT: 'STABILIZE_BOX_POSITION', OUTCOME_FAILED: OUTCOME_FAILED})
+
+        sm.add_state('STABILIZE_BOX_POSITION',
+            CbState([OUTCOME_NEXT], self._stabilize_box_position),
+            {OUTCOME_NEXT: 'GO_TO_PRE_GRASP_INITIAL'})
+
         sm.add_state('GO_TO_PRE_GRASP_INITIAL',
             CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_go_to_pre_grasp),
-            {OUTCOME_NEXT: 'PREPARE_OBJECT_LIST', OUTCOME_FAILED: OUTCOME_FAILED})
+            {OUTCOME_NEXT: 'STABILIZE_OBJECT_LOCATIONS_INITIAL', OUTCOME_FAILED: OUTCOME_FAILED})
+
+        sm.add_state('STABILIZE_OBJECT_LOCATIONS_INITIAL',
+            CbState([OUTCOME_NEXT], self._stabilize_object_locations),
+            {OUTCOME_NEXT: 'GRASP_THEN_RESET'})
 
         sm.add_state('PREPARE_OBJECT_LIST',
             CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._prepare_object_list),
-            {OUTCOME_NEXT: 'GRASP_THEN_RESET', OUTCOME_FAILED: OUTCOME_FAILED})
+            {OUTCOME_NEXT: 'GO_TO_PRE_LOAD_FOR_BOX_MAPPING', OUTCOME_FAILED: OUTCOME_FAILED})
 
         sm.add_state('GO_TO_PRE_GRASP',
             CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_go_to_pre_grasp),
-            {OUTCOME_NEXT: 'GRASP_THEN_RESET', OUTCOME_FAILED: OUTCOME_FAILED})
+            {OUTCOME_NEXT: 'STABILIZE_OBJECT_LOCATIONS', OUTCOME_FAILED: OUTCOME_FAILED})
+
+        sm.add_state('STABILIZE_OBJECT_LOCATIONS',
+            CbState([OUTCOME_NEXT], self._stabilize_object_locations),
+            {OUTCOME_NEXT: 'GRASP_THEN_RESET'})
 
         sm.add_state('GRASP_THEN_RESET',
             CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_grasp_then_reset),
@@ -147,7 +190,11 @@ class TaskManagerNode(Node):
 
         sm.add_state('ADVANCE_CLASSIFICATION',
             CbState([OUTCOME_MORE_OBJECTS, OUTCOME_NEXT], self._advance_classification),
-            {OUTCOME_MORE_OBJECTS: 'GO_TO_PRE_GRASP', OUTCOME_NEXT: 'SETUP_BATCHES'})
+            {OUTCOME_MORE_OBJECTS: 'GO_TO_PRE_GRASP', OUTCOME_NEXT: 'VERIFY_CLASSIFICATIONS'})
+
+        sm.add_state('VERIFY_CLASSIFICATIONS',
+            CbState([OUTCOME_NEXT, OUTCOME_MORE_OBJECTS, OUTCOME_FAILED], self._verify_classifications),
+            {OUTCOME_NEXT: 'SETUP_BATCHES', OUTCOME_MORE_OBJECTS: 'GO_TO_PRE_GRASP', OUTCOME_FAILED: OUTCOME_FAILED})
 
         # --- Delivery phase ---
         sm.add_state('SETUP_BATCHES',
@@ -160,7 +207,11 @@ class TaskManagerNode(Node):
 
         sm.add_state('LOAD_GO_TO_PRE_GRASP',
             CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_go_to_pre_grasp),
-            {OUTCOME_NEXT: 'PICKUP', OUTCOME_FAILED: OUTCOME_FAILED})
+            {OUTCOME_NEXT: 'STABILIZE_OBJECT_LOCATIONS_AT_PRE_GRASP', OUTCOME_FAILED: OUTCOME_FAILED})
+
+        sm.add_state('STABILIZE_OBJECT_LOCATIONS_AT_PRE_GRASP',
+            CbState([OUTCOME_NEXT], self._stabilize_object_locations),
+            {OUTCOME_NEXT: 'PICKUP'})
 
         sm.add_state('PICKUP',
             CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_pickup),
@@ -168,7 +219,11 @@ class TaskManagerNode(Node):
 
         sm.add_state('GO_TO_PRE_LOAD',
             CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_go_to_pre_load),
-            {OUTCOME_NEXT: 'LOAD_OBJECT', OUTCOME_FAILED: OUTCOME_FAILED})
+            {OUTCOME_NEXT: 'STABILIZE_BOX_POSITION_AT_PRE_LOAD', OUTCOME_FAILED: OUTCOME_FAILED})
+
+        sm.add_state('STABILIZE_BOX_POSITION_AT_PRE_LOAD',
+            CbState([OUTCOME_NEXT], self._stabilize_box_position),
+            {OUTCOME_NEXT: 'LOAD_OBJECT'})
 
         sm.add_state('LOAD_OBJECT',
             CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_load_object),
@@ -176,19 +231,31 @@ class TaskManagerNode(Node):
 
         sm.add_state('ADVANCE_LOAD',
             CbState([OUTCOME_MORE_OBJECTS, OUTCOME_DELIVER], self._advance_load),
-            {OUTCOME_MORE_OBJECTS: 'LOAD_GO_TO_PRE_GRASP', OUTCOME_DELIVER: 'DELIVER'})
+            {OUTCOME_MORE_OBJECTS: 'LOAD_GO_TO_PRE_GRASP', OUTCOME_DELIVER: 'GO_TO_PRE_LOAD_BEFORE_DELIVER'})
+
+        sm.add_state('GO_TO_PRE_LOAD_BEFORE_DELIVER',
+            CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_go_to_pre_load),
+            {OUTCOME_NEXT: 'DELIVER', OUTCOME_FAILED: OUTCOME_FAILED})
 
         sm.add_state('DELIVER',
-            CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_deliver),
-            {OUTCOME_NEXT: 'RETURN', OUTCOME_FAILED: OUTCOME_FAILED})
+            CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_deliver_unloading),
+            {OUTCOME_NEXT: 'DELIVER_LOADING', OUTCOME_FAILED: OUTCOME_FAILED})
 
-        sm.add_state('RETURN',
-            CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_return),
-            {OUTCOME_NEXT: 'ADVANCE_BATCH', OUTCOME_FAILED: OUTCOME_FAILED})
+        sm.add_state('DELIVER_LOADING',
+            CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_deliver_loading),
+            {OUTCOME_NEXT: 'STABILIZE_BOX_POSITION_AFTER_RETURN', OUTCOME_FAILED: OUTCOME_FAILED})
+
+        sm.add_state('STABILIZE_BOX_POSITION_AFTER_RETURN',
+            CbState([OUTCOME_NEXT], self._stabilize_box_position),
+            {OUTCOME_NEXT: 'ADVANCE_BATCH'})
 
         sm.add_state('ADVANCE_BATCH',
             CbState([OUTCOME_MORE_BATCHES, OUTCOME_DONE], self._advance_batch),
-            {OUTCOME_MORE_BATCHES: 'START_BATCH', OUTCOME_DONE: OUTCOME_DONE})
+            {OUTCOME_MORE_BATCHES: 'START_BATCH', OUTCOME_DONE: 'GO_TO_PRE_GRASP_DONE'})
+
+        sm.add_state('GO_TO_PRE_GRASP_DONE',
+            CbState([OUTCOME_NEXT, OUTCOME_FAILED], self._state_go_to_pre_grasp),
+            {OUTCOME_NEXT: OUTCOME_DONE, OUTCOME_FAILED: OUTCOME_FAILED})
 
         return sm
 
@@ -196,16 +263,107 @@ class TaskManagerNode(Node):
     # Classification states
     # ------------------------------------------------------------------ #
 
+    def _state_open_gripper(self, bb: Blackboard) -> str:
+        self._log_state('open_gripper')
+        if not self._open_gripper.wait_for_service(timeout_sec=self._service_timeout):
+            bb.error = '/open_gripper service unavailable'
+            return OUTCOME_FAILED
+        future = self._open_gripper.call_async(Trigger.Request())
+        rclpy.spin_until_future_complete(self, future, timeout_sec=self._service_timeout)
+        res = future.result()
+        if res is None or not res.success:
+            bb.error = f'open_gripper failed: {getattr(res, "message", "no response")}'
+            return OUTCOME_FAILED
+        return OUTCOME_NEXT
+
     def _prepare_object_list(self, bb: Blackboard) -> str:
-        self._log_state('prepare_object_list')
+        self._log_state(
+            f'prepare_object_list — waiting up to {self._detection_timeout_sec}s '
+            'for /groundings'
+        )
+        wait_deadline = _time.monotonic() + self._detection_timeout_sec
+        ids = []
+        last_log = 0.0
+        while _time.monotonic() < wait_deadline:
+            ids = sorted(oid for oid in self._records if oid not in self._ignored_ids)
+            if ids:
+                break
+            now = _time.monotonic()
+            if now - last_log >= 2.0:
+                self.get_logger().info('Waiting for object groundings...')
+                last_log = now
+            _time.sleep(0.1)
+        if not ids:
+            bb.error = f'No detected objects after {self._detection_timeout_sec:.1f}s (check /groundings).'
+            return OUTCOME_FAILED
+
+        settle_deadline = _time.monotonic() + self._detection_settle_sec
+        while _time.monotonic() < settle_deadline:
+            _time.sleep(0.1)
         ids = sorted(oid for oid in self._records if oid not in self._ignored_ids)
         if not ids:
-            bb.error = 'No detected objects (check /groundings).'
+            bb.error = 'No detected objects after settle wait (check /groundings).'
             return OUTCOME_FAILED
         bb.object_ids = ids
+        bb.all_object_ids = ids
         bb.classify_idx = 0
         bb.current_object_id = ids[0]
-        self.get_logger().info(f'Objects to classify: {ids}')
+        self.get_logger().info(f'Detected {len(ids)} objects (sorted by ID): {ids}')
+        return OUTCOME_NEXT
+
+    def _wait_for_arm_to_stabilize(self) -> None:
+        if self._arm_stabilize_sec <= 0.0:
+            return
+        self.get_logger().info(f'Waiting {self._arm_stabilize_sec:.1f}s for arm to stabilize')
+        _time.sleep(self._arm_stabilize_sec)
+
+    def _stabilize_object_locations(self, bb: Blackboard) -> str:
+        del bb
+        self._log_state(
+            f'stabilize_object_locations — waiting {self._detection_settle_sec}s '
+            'for object groundings'
+        )
+        self._wait_for_arm_to_stabilize()
+        deadline = _time.monotonic() + self._detection_settle_sec
+        while _time.monotonic() < deadline:
+            _time.sleep(0.1)
+        ids = sorted(oid for oid in self._visible_grounding_ids if oid not in self._ignored_ids)
+        if ids:
+            self.get_logger().info(f'Refreshed visible object groundings at pre_grasp: {ids}')
+        else:
+            self.get_logger().warn('No object groundings visible after pre_grasp stabilization.')
+        return OUTCOME_NEXT
+
+    def _stabilize_box_position(self, bb: Blackboard) -> str:
+        del bb
+        self._log_state(
+            f'stabilize_box_position — waiting {self._box_detection_settle_sec}s '
+            f'for AprilTag {BOX_TAG_ID}'
+        )
+        self._wait_for_arm_to_stabilize()
+        had_cache = self._last_box_position is not None
+        deadline = _time.monotonic() + self._box_detection_settle_sec
+        seen_box = BOX_TAG_ID in self._visible_grounding_ids
+        while _time.monotonic() < deadline:
+            seen_box = seen_box or BOX_TAG_ID in self._visible_grounding_ids
+            _time.sleep(0.1)
+
+        if seen_box and self._last_box_position is not None:
+            p = self._last_box_position.point
+            self.get_logger().info(
+                f'Cached stabilized box position in base_link: '
+                f'({p.x:.3f}, {p.y:.3f}, {p.z:.3f})'
+            )
+        elif had_cache and self._last_box_position is not None:
+            p = self._last_box_position.point
+            self.get_logger().warn(
+                f'No live AprilTag {BOX_TAG_ID} while stabilizing; keeping cached box '
+                f'position ({p.x:.3f}, {p.y:.3f}, {p.z:.3f})'
+            )
+        else:
+            self.get_logger().warn(
+                f'No live or cached AprilTag {BOX_TAG_ID} position after stabilization.'
+            )
         return OUTCOME_NEXT
 
     def _state_go_to_pre_grasp(self, bb: Blackboard) -> str:
@@ -239,8 +397,8 @@ class TaskManagerNode(Node):
         rclpy.spin_until_future_complete(self, future, timeout_sec=self._service_timeout)
         res = future.result()
         if res is None or not res.success:
-            bb.error = f'classify_texture failed for obj {oid}'
-            return OUTCOME_FAILED
+            self.get_logger().warn(f'classify_texture failed for obj {oid}, skipping (will catch in verification)')
+            return OUTCOME_NEXT
         self._save_record(oid, texture_class=int(res.texture_class))
         self.get_logger().info(f'obj {oid} → texture class {res.texture_class}')
         return OUTCOME_NEXT
@@ -253,6 +411,26 @@ class TaskManagerNode(Node):
             return OUTCOME_MORE_OBJECTS
         return OUTCOME_NEXT
 
+    def _verify_classifications(self, bb: Blackboard) -> str:
+        self._log_state('verify_classifications')
+        all_ids = list(bb.all_object_ids)
+        missing = [oid for oid in all_ids if self._records.get(oid, ObjectRecord()).texture_class == -1]
+        for oid in all_ids:
+            rec = self._records.get(oid)
+            cls = rec.texture_class if rec else -1
+            self.get_logger().info(f'  obj {oid}: texture_class={cls}')
+        if missing:
+            self.get_logger().warn(f'Unclassified obj(s): {missing} — retrying grasp_then_reset')
+            bb.object_ids = missing
+            bb.classify_idx = 0
+            bb.current_object_id = missing[0]
+            return OUTCOME_MORE_OBJECTS
+        summary = ', '.join(
+            f'obj {oid} → class {self._records[oid].texture_class}' for oid in all_ids
+        )
+        self.get_logger().info(f'All objects classified: {summary}')
+        return OUTCOME_NEXT
+
     # ------------------------------------------------------------------ #
     # Delivery states
     # ------------------------------------------------------------------ #
@@ -261,7 +439,7 @@ class TaskManagerNode(Node):
         self._log_state('setup_batches')
         batches = []
         for cls in DELIVERY_ORDER:
-            ids = [oid for oid in list(bb.object_ids)
+            ids = [oid for oid in list(bb.all_object_ids)
                    if self._records.get(oid) and self._records[oid].texture_class == cls]
             batches.append(ids)
             self.get_logger().info(f'Delivery batch class {cls}: {ids}')
@@ -314,14 +492,22 @@ class TaskManagerNode(Node):
         self._log_state(f'load_object_into_box obj {oid}')
         goal = LoadObjectIntoBox.Goal()
         goal.object_id = oid
-        if self._last_box_position is not None:
+        if BOX_TAG_ID in self._visible_grounding_ids:
+            self.get_logger().info(
+                f'AprilTag {BOX_TAG_ID} is currently visible; place_node will use live grounding.'
+            )
+        elif self._last_box_position is not None:
             goal.box_position = self._last_box_position
             p = self._last_box_position.point
             self.get_logger().info(
-                f'Passing last known box position in base_link: ({p.x:.3f}, {p.y:.3f}, {p.z:.3f})'
+                f'AprilTag {BOX_TAG_ID} not currently visible; passing cached box position '
+                f'in base_link: ({p.x:.3f}, {p.y:.3f}, {p.z:.3f})'
             )
         else:
-            self.get_logger().warn('No cached box position — place_node will fall back to AprilTag detection.')
+            self.get_logger().warn(
+                f'No live or cached AprilTag {BOX_TAG_ID} position; '
+                'place_node will try its own live grounding fallback.'
+            )
         result = self._send_action(self._load_into_box, goal, '/load_object_into_box')
         if not self._ok(result):
             bb.error = self._msg(result, f'load_object_into_box failed for obj {oid}')
@@ -340,9 +526,18 @@ class TaskManagerNode(Node):
             return OUTCOME_MORE_OBJECTS
         return OUTCOME_DELIVER
 
-    def _state_deliver(self, bb: Blackboard) -> str:
-        self._log_state(f'deliver batch {list(bb.loaded_this_batch)}')
-        result = self._send_action(self._deliver, Deliver.Goal(), '/deliver')
+    def _state_deliver_unloading(self, bb: Blackboard) -> str:
+        cls = DELIVERY_ORDER[int(bb.batch_idx)]
+        self._log_state(f'deliver class {cls} objects {list(bb.loaded_this_batch)}')
+        if self._use_placeholder_delivery:
+            self.get_logger().info('[deliver] placeholder — waiting 5 s')
+            _time.sleep(5.0)
+            for oid in list(bb.loaded_this_batch):
+                self._save_record(int(oid), delivered=True)
+            return OUTCOME_NEXT
+        goal = Delivery.Goal()
+        goal.target = 'unloading'
+        result = self._send_action(self._deliver, goal, '/deliver')
         if not self._ok(result):
             bb.error = self._msg(result, '/deliver failed')
             return OUTCOME_FAILED
@@ -350,11 +545,18 @@ class TaskManagerNode(Node):
             self._save_record(int(oid), delivered=True)
         return OUTCOME_NEXT
 
-    def _state_return(self, bb: Blackboard) -> str:
-        self._log_state('return')
-        result = self._send_action(self._return, Return.Goal(), '/return')
+    def _state_deliver_loading(self, bb: Blackboard) -> str:
+        cls = DELIVERY_ORDER[int(bb.batch_idx)]
+        self._log_state(f'deliver_loading class {cls} — waiting 5 s after unloading')
+        _time.sleep(5.0)
+        if self._use_placeholder_delivery:
+            self.get_logger().info('[deliver_loading] placeholder — skipping action')
+            return OUTCOME_NEXT
+        goal = Delivery.Goal()
+        goal.target = 'loading'
+        result = self._send_action(self._deliver, goal, '/deliver')
         if not self._ok(result):
-            bb.error = self._msg(result, '/return failed')
+            bb.error = self._msg(result, '/deliver loading failed')
             return OUTCOME_FAILED
         return OUTCOME_NEXT
 
@@ -429,6 +631,7 @@ class TaskManagerNode(Node):
                 f'  obj {r.object_id}: class={r.texture_class} classified={r.classified} delivered={r.delivered}')
 
     def _groundings_callback(self, msg: ObjectGroundingArray) -> None:
+        self._visible_grounding_ids = {g.object_id for g in msg.objects}
         for g in msg.objects:
             self._ensure_record(g.object_id)
             if g.object_id == BOX_TAG_ID:

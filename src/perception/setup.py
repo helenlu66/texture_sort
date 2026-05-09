@@ -30,7 +30,7 @@ setup(
             'external_cam_node = perception.vision_node:main',
             'apriltag_overlay = perception.apriltag_overlay:main',
             'tactile_node = perception.tactile_node:main',
-            'kinova_rtsp_bridge = perception.kinova_rtsp_bridge:main',
             'gelsight_node = perception.gelsight_node:main',
+            'wrist_camera_qos_relay = perception.wrist_camera_qos_relay:main',
     ]},
 )

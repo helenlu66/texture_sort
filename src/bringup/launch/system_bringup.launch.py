@@ -1,6 +1,6 @@
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 import os
@@ -49,15 +49,29 @@ def generate_launch_description() -> LaunchDescription:
         rs_launch,
         kinova_vision_launch,
         Node(
+            package='perception',
+            executable='wrist_camera_qos_relay',
+            name='wrist_camera_qos_relay',
+            output='screen',
+            parameters=[params_file],
+        ),
+        TimerAction(
+            period=3.0,
+            actions=[
+        Node(
             package='apriltag_ros',
             executable='apriltag_node',
             name='apriltag',
             output='screen',
             parameters=[params_file],
             remappings=[
-                ('image_rect', '/wrist_camera/color/image_raw'),
-                ('camera_info', '/wrist_camera/color/camera_info'),
+                ('image_rect', '/wrist_camera/color/image_raw_best_effort'),
+                ('camera_info', '/wrist_camera/color/camera_info_best_effort'),
+                ('image_rect/camera_info', '/wrist_camera/color/camera_info_best_effort'),
+                ('/wrist_camera/color/camera_info', '/wrist_camera/color/camera_info_best_effort'),
                 ('/detections', '/apriltag/detections'),
+            ],
+        ),
             ],
         ),
         Node(package='perception', executable='apriltag_overlay', name='apriltag_overlay', output='screen', parameters=[params_file]),
@@ -94,10 +108,11 @@ def generate_launch_description() -> LaunchDescription:
             ],
         ),
         Node(package='rqt_image_view', executable='rqt_image_view', name='wrist_camera_view', output='screen', arguments=['/detections_image']),
-        Node(package='rqt_image_view', executable='rqt_image_view', name='external_camera_view', output='screen', arguments=['/external_camera/color/image_raw']),
-        Node(package='manipulation', executable='manipulation_node', name='manipulation_node', output='screen', parameters=[params_file]),
+        Node(package='rqt_image_view', executable='rqt_image_view', name='gelsight_camera_view', output='screen', arguments=['/gelsight/image_raw']),
+        Node(package='manipulation', executable='grasp_node', name='grasp_node', output='screen', parameters=[params_file]),
+        Node(package='manipulation', executable='place_node', name='place_node', output='screen', parameters=[params_file]),
+        Node(package='perception', executable='gelsight_node', name='gelsight_node', output='screen', parameters=[params_file]),
+        Node(package='perception', executable='tactile_node', name='tactile_node', output='screen', parameters=[params_file]),
+        Node(package='task_manager', executable='task_manager_node', name='task_manager_node', output='screen', parameters=[params_file]),
         # Node(package='perception', executable='external_cam_node', name='external_cam_node', output='screen', parameters=[params_file]),
-        # Node(package='perception', executable='tactile_node', name='tactile_node', output='screen'),
-        # Node(package='navigation', executable='delivery_node', name='turtlebot_delivery_node', output='screen'),
-        # Node(package='task_manager', executable='task_manager_node', name='task_manager_node', output='screen'),
     ])

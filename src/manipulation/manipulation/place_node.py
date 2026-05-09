@@ -2,6 +2,7 @@ from typing import Optional
 import json
 from pathlib import Path
 import threading
+import time
 
 from ament_index_python.packages import get_package_share_directory
 import rclpy
@@ -50,6 +51,8 @@ class PlaceNode(Node):
         self.declare_parameter('grasp_point_offset_y', 0.0)
         self.declare_parameter('grasp_point_offset_z', 0.135)
         self.declare_parameter('pre_load_path', '')
+        self.declare_parameter('arm_stabilize_sec', 1.0)
+        self.declare_parameter('object_detection_settle_sec', 3.0)
 
         groundings_topic      = str(self.get_parameter('groundings_topic').value)
         self._base_frame      = str(self.get_parameter('base_frame').value)
@@ -66,6 +69,8 @@ class PlaceNode(Node):
             z=float(self.get_parameter('grasp_point_offset_z').value),
         )
         self._pre_load_path   = str(self.get_parameter('pre_load_path').value)
+        self._arm_stabilize_sec = float(self.get_parameter('arm_stabilize_sec').value)
+        self._object_detection_settle_sec = float(self.get_parameter('object_detection_settle_sec').value)
         self._action_callback_group = ReentrantCallbackGroup()
 
         self.current_joint_state: Optional[JointState] = None
@@ -158,7 +163,7 @@ class PlaceNode(Node):
                 'Moving to pre_load (joint goal): '
                 + ', '.join(f'{n}={v:.4f}' for n, v in arm_joints.items())
             )
-            ok, message = self._move_to_joint_positions(arm_joints, velocity_scale=self._lower_vel_scale)
+            ok, message = self._move_to_joint_positions(arm_joints, velocity_scale=self._vel_scale)
         else:
             goal_handle.abort()
             r = GoToPrePose.Result()
@@ -187,57 +192,54 @@ class PlaceNode(Node):
             self.get_logger().info(f'[load_object_into_box] {state}')
 
         fb('resolving_box_pose')
-        goal_box_position = goal_handle.request.box_position
-        if goal_box_position.header.frame_id:
-            # Caller provided an explicit box position — transform to base_link if needed.
+        self._wait_for_groundings_refresh(BOX_TAG_ID)
+
+        # Prefer a fresh AprilTag detection from the current arm position (most accurate —
+        # arm is stable at pre_load and close to the box).  Fall back to the task-manager
+        # cached position only when the tag is not visible right now.
+        grounded = self._object_poses.get(BOX_TAG_ID)
+        if grounded is not None:
+            try:
+                tf = self.tf_buffer.lookup_transform(
+                    self._base_frame,
+                    grounded.header.frame_id,
+                    rclpy.time.Time(),
+                    timeout=rclpy.duration.Duration(seconds=1.0),
+                )
+            except Exception as e:
+                return self._abort(goal_handle, f'TF lookup for fresh AprilTag detection failed: {e}')
+            box_in_base = tf2_geometry_msgs.do_transform_pose_stamped(grounded, tf)
+            bp = box_in_base.pose.position
+            self.get_logger().info(
+                f'[load_object_into_box] using fresh tag {BOX_TAG_ID} detection in base_link: '
+                f'pos=({bp.x:.4f}, {bp.y:.4f}, {bp.z:.4f})'
+            )
+        else:
+            # Tag not visible — fall back to the task-manager cached position.
+            goal_box_position = goal_handle.request.box_position
+            if not goal_box_position.header.frame_id:
+                return self._abort(goal_handle,
+                    f'AprilTag {BOX_TAG_ID} not visible and no cached box_position provided.')
             if goal_box_position.header.frame_id != self._base_frame:
                 try:
                     tf = self.tf_buffer.lookup_transform(
                         self._base_frame,
                         goal_box_position.header.frame_id,
-                        goal_box_position.header.stamp,
+                        rclpy.time.Time(),
                         timeout=rclpy.duration.Duration(seconds=1.0),
                     )
                 except Exception as e:
-                    return self._abort(goal_handle, f'TF lookup for provided box_position failed: {e}')
+                    return self._abort(goal_handle, f'TF lookup for cached box_position failed: {e}')
                 from geometry_msgs.msg import PointStamped
                 pt_in_base = tf2_geometry_msgs.do_transform_point(goal_box_position, tf)
             else:
                 pt_in_base = goal_box_position
-
             box_in_base = PoseStamped()
             box_in_base.header.frame_id = self._base_frame
             box_in_base.pose.position = pt_in_base.point
             self.get_logger().info(
-                f'[load_object_into_box] using provided box_position in base_link: '
+                f'[load_object_into_box] tag not visible — using cached box_position: '
                 f'pos=({pt_in_base.point.x:.4f}, {pt_in_base.point.y:.4f}, {pt_in_base.point.z:.4f})'
-            )
-        else:
-            # Fall back to AprilTag detection.
-            grounded = self._object_poses.get(BOX_TAG_ID)
-            if grounded is None:
-                return self._abort(goal_handle, f'No box_position provided and AprilTag {BOX_TAG_ID} not visible.')
-
-            try:
-                tf = self.tf_buffer.lookup_transform(
-                    self._base_frame,
-                    grounded.header.frame_id,
-                    grounded.header.stamp,
-                    timeout=rclpy.duration.Duration(seconds=1.0),
-                )
-            except Exception as e:
-                return self._abort(goal_handle, f'TF lookup failed: {e}')
-
-            cp = grounded.pose.position
-            self.get_logger().info(
-                f'[load_object_into_box] tag {BOX_TAG_ID} in camera ({grounded.header.frame_id}): '
-                f'pos=({cp.x:.4f}, {cp.y:.4f}, {cp.z:.4f})'
-            )
-            box_in_base = tf2_geometry_msgs.do_transform_pose_stamped(grounded, tf)
-            bp = box_in_base.pose.position
-            self.get_logger().info(
-                f'[load_object_into_box] tag {BOX_TAG_ID} in base_link (raw): '
-                f'pos=({bp.x:.4f}, {bp.y:.4f}, {bp.z:.4f})'
             )
 
         current_ee_tf = self.tf_buffer.lookup_transform(
@@ -278,6 +280,19 @@ class PlaceNode(Node):
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
     # ------------------------------------------------------------------ #
+
+    def _wait_for_groundings_refresh(self, object_id: int) -> None:
+        if self._arm_stabilize_sec > 0.0:
+            self.get_logger().info(
+                f'[load_object_into_box] waiting {self._arm_stabilize_sec:.1f}s for arm to stabilize'
+            )
+            time.sleep(self._arm_stabilize_sec)
+        if self._object_detection_settle_sec > 0.0:
+            self.get_logger().info(
+                f'[load_object_into_box] waiting {self._object_detection_settle_sec:.1f}s '
+                f'for grounding {object_id}'
+            )
+            time.sleep(self._object_detection_settle_sec)
 
     def _resolve_pre_load_path(self) -> Path:
         if self._pre_load_path:

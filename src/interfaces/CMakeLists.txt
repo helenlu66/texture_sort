@@ -9,20 +9,17 @@ find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
-
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ObjectRecord.msg"
   "msg/ObjectPose.msg"
   "msg/ObjectGrounding.msg"
   "msg/ObjectGroundingArray.msg"
   "msg/TextureClassification.msg"
-  "msg/DeliveryState.msg"
   "msg/TaskState.msg"
   "srv/InitializeSceneObjects.srv"
   "srv/DetectObjectPose.srv"
   "srv/ClassifyTexture.srv"
   "srv/CaptureTactileImage.srv"
-  "srv/CheckBaseReady.srv"
   "srv/StartSortAndDelivery.srv"
   "srv/GetNextCategory.srv"
   "srv/GetObjectsInCategory.srv"
@@ -31,8 +28,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/ExecutePlace.action"
   "action/GoToPrePose.action"
   "action/LoadObjectIntoBox.action"
-  "action/Deliver.action"
-  "action/Return.action"
+  "action/Delivery.action"
   DEPENDENCIES action_msgs builtin_interfaces geometry_msgs sensor_msgs std_msgs std_srvs
 )
 

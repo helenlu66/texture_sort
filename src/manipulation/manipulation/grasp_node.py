@@ -19,6 +19,7 @@ from geometry_msgs.msg import (
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
+from interfaces.srv import CaptureTactileImage
 from shape_msgs.msg import SolidPrimitive
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
@@ -62,6 +63,9 @@ class GraspNode(Node):
         self.declare_parameter('grasp_point_offset_y', 0.0)
         self.declare_parameter('grasp_point_offset_z', 0.13)
         self.declare_parameter('pre_grasp_path', '')
+        self.declare_parameter('grasp_hold_seconds', 2.0)
+        self.declare_parameter('arm_stabilize_sec', 1.0)
+        self.declare_parameter('object_detection_settle_sec', 3.0)
 
         groundings_topic = str(self.get_parameter('groundings_topic').value)
         self._base_frame  = str(self.get_parameter('base_frame').value)
@@ -80,6 +84,9 @@ class GraspNode(Node):
             z=float(self.get_parameter('grasp_point_offset_z').value),
         )
         self._pre_grasp_path = str(self.get_parameter('pre_grasp_path').value)
+        self._grasp_hold_seconds = float(self.get_parameter('grasp_hold_seconds').value)
+        self._arm_stabilize_sec = float(self.get_parameter('arm_stabilize_sec').value)
+        self._object_detection_settle_sec = float(self.get_parameter('object_detection_settle_sec').value)
         self._action_callback_group = ReentrantCallbackGroup()
 
         self.current_joint_state: Optional[JointState] = None
@@ -105,6 +112,11 @@ class GraspNode(Node):
             '/robotiq_gripper_controller/gripper_cmd',
             callback_group=self._action_callback_group,
         )
+        self._capture_tactile_client = self.create_client(
+            CaptureTactileImage,
+            '/capture_tactile_image',
+            callback_group=self._action_callback_group,
+        )
 
         self.grasp_then_reset_action_server = ActionServer(
             self,
@@ -118,6 +130,12 @@ class GraspNode(Node):
             Trigger,
             '/reset_grasp',
             self._reset_grasp_service,
+            callback_group=self._action_callback_group,
+        )
+        self.create_service(
+            Trigger,
+            '/open_gripper',
+            self._open_gripper_service,
             callback_group=self._action_callback_group,
         )
         ActionServer(
@@ -161,8 +179,8 @@ class GraspNode(Node):
     # ------------------------------------------------------------------ #
 
     def grasp_then_reset_callback(self, goal_handle):
-        """Grasp the object, then opens the gripper, returs to the approach height, and returns to the pre-grasp pose without picking up the object. Used for collecting tactile data from each object."""
-        success, message = self._run_grasp_sequence(goal_handle, open_back_up=True, lift=True)
+        """Grasp the object, hold for gelsight capture, open gripper, and return to pre-grasp. Used for collecting tactile data."""
+        success, message = self._run_grasp_sequence(goal_handle, open_back_up=True, lift=True, capture_image=True)
         if not success:
             return self._abort(goal_handle, message)
         
@@ -173,34 +191,28 @@ class GraspNode(Node):
         return r
 
     def _reset_grasp_service(self, request, response):
-        """Opens the gripper, lifts to approach height, and returns to pre-grasp pose."""
+        """Opens the gripper and returns directly to the pre-grasp pose."""
         if not self._gripper_cmd(self._gripper_open_position):
             response.success = False
             response.message = 'Gripper open command failed.'
             return response
-
-        current_ee_tf = self.tf_buffer.lookup_transform(
-            self._base_frame, self._ee_link,
-            rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=1.0),
-        )
-        approach_target = PoseStamped()
-        approach_target.header = current_ee_tf.header
-        approach_target.pose.position.x = current_ee_tf.transform.translation.x
-        approach_target.pose.position.y = current_ee_tf.transform.translation.y
-        approach_target.pose.position.z = self._approach_height
-        approach_target.pose.orientation = current_ee_tf.transform.rotation
-
-        moved, message = self._move_to_pose(approach_target)
-        if not moved:
-            response.success = False
-            response.message = f'Lift motion failed: {message}'
-            return response
+        self._publish_grasp_state(False)
 
         returned, message = self.return_to_pre_grasp()
         response.success = returned
         response.message = 'Grasp reset successful.' if returned else f'Return to pre-grasp failed: {message}'
         return response
 
+    def _open_gripper_service(self, request, response):
+        """Opens the gripper only — does not move the arm."""
+        if self._gripper_cmd(self._gripper_open_position):
+            self._publish_grasp_state(False)
+            response.success = True
+            response.message = 'Gripper opened.'
+        else:
+            response.success = False
+            response.message = 'Gripper open command failed.'
+        return response
 
     def execute_grasp_callback(self, goal_handle):
         success, message = self._run_grasp_sequence(goal_handle, lift=False)
@@ -227,7 +239,7 @@ class GraspNode(Node):
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
     # ------------------------------------------------------------------ #
-    def _run_grasp_sequence(self, goal_handle, open_back_up:bool=False, lift: bool=False) -> tuple[bool, str]:
+    def _run_grasp_sequence(self, goal_handle, open_back_up: bool = False, lift: bool = False, capture_image: bool = False) -> tuple[bool, str]:
         """Grasp the object, with the option to open the gripper back up and the option to go back up.
         Args:
             goal_handle: The goal handle for the grasp action.
@@ -238,6 +250,7 @@ class GraspNode(Node):
         """
 
         oid = goal_handle.request.object_id
+        save_img = bool(getattr(goal_handle.request, 'save_img', False))
 
         def fb(state: str):
             msg = ExecuteGrasp.Feedback()
@@ -246,6 +259,7 @@ class GraspNode(Node):
             self.get_logger().info(f'[grasp {oid}] {state}')
 
         fb('resolving_target_pose')
+        self._wait_for_groundings_refresh(oid)
         try:
             grasp_target_in_base = self._resolve_grasp_target(oid)
         except Exception as e:
@@ -291,15 +305,6 @@ class GraspNode(Node):
         if not moved:
             return False, f'Approach motion failed: {message}'
         
-        # wait for 2 seconds
-        # time.sleep(2.0)
-        # # resolve target again for better x, y precision after moving to approach pose
-        # grasp_target_in_base = self._resolve_grasp_target(oid)
-        # if grasp_target_in_base is None:
-        #     return False, f'No grounding for object {oid} after moving to approach pose.'
-        # # use the old z but updated x, y for the grasp pose to try to correct for any x, y error in the original grounding
-        # new_grasp_ee_target = self._ee_target_for_grasp_point(grasp_target_in_base)
-        # new_grasp_ee_target.pose.position.z = grasp_ee_target.pose.position.z
 
         fb('lowering_to_object')
         moved, message = self._move_to_pose(
@@ -313,6 +318,11 @@ class GraspNode(Node):
         if not self._gripper_cmd(self._gripper_closed_position):
             return False, 'Gripper close command failed.'
         self._publish_grasp_state(True)
+
+        if capture_image or save_img:
+            fb('holding_for_gelsight')
+            time.sleep(self._grasp_hold_seconds)
+            self._capture_tactile_image(oid, save_img=save_img)
 
         if open_back_up:
             fb('opening_gripper')
@@ -345,23 +355,64 @@ class GraspNode(Node):
         return True, f'Moved to object {oid} and closed gripper.'
 
 
+    def _capture_tactile_image(self, object_id: int, save_img: bool = False) -> None:
+        if not self._capture_tactile_client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().warn('/capture_tactile_image service not available — skipping capture.')
+            return
+        req = CaptureTactileImage.Request()
+        req.object_id = object_id
+        req.save_img = save_img
+        future = self._capture_tactile_client.call_async(req)
+        event = threading.Event()
+        future.add_done_callback(lambda _: event.set())
+        event.wait(timeout=5.0)
+        if future.done() and future.result().success:
+            self.get_logger().info(future.result().message)
+        else:
+            self.get_logger().warn(f'Tactile image capture failed for object {object_id}.')
+
+    def _wait_for_groundings_refresh(self, object_id: int) -> None:
+        if self._arm_stabilize_sec > 0.0:
+            self.get_logger().info(
+                f'[grasp {object_id}] waiting {self._arm_stabilize_sec:.1f}s for arm to stabilize'
+            )
+            time.sleep(self._arm_stabilize_sec)
+        if self._object_detection_settle_sec > 0.0:
+            self.get_logger().info(
+                f'[grasp {object_id}] waiting {self._object_detection_settle_sec:.1f}s for object groundings'
+            )
+            time.sleep(self._object_detection_settle_sec)
+
     def _resolve_grasp_target(self, object_id: int) -> Optional[PoseStamped]:
-        grounded_pose = self._object_poses.get(object_id)
+        # Wait up to 2 s for a grounding received after this call started,
+        # so we don't transform a stale camera-frame pose with the current TF.
+        request_time = self.get_clock().now()
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            grounded_pose = self._object_poses.get(object_id)
+            if grounded_pose is not None:
+                stamp = rclpy.time.Time.from_msg(grounded_pose.header.stamp)
+                if stamp >= request_time:
+                    break
+            time.sleep(0.05)
+        else:
+            grounded_pose = self._object_poses.get(object_id)
+
         if grounded_pose is None:
             return None
 
         p = grounded_pose.pose.position
         q = grounded_pose.pose.orientation
-        self.get_logger().info(
-            f'[debug] object in camera ({grounded_pose.header.frame_id}): '
-            f'pos=({p.x:.4f}, {p.y:.4f}, {p.z:.4f})  '
-            f'quat=({q.x:.4f}, {q.y:.4f}, {q.z:.4f}, {q.w:.4f})'
-        )
+        # self.get_logger().info(
+        #     f'[debug] object in camera ({grounded_pose.header.frame_id}): '
+        #     f'pos=({p.x:.4f}, {p.y:.4f}, {p.z:.4f})  '
+        #     f'quat=({q.x:.4f}, {q.y:.4f}, {q.z:.4f}, {q.w:.4f})'
+        # )
 
         tf = self.tf_buffer.lookup_transform(
             self._base_frame,
             grounded_pose.header.frame_id,
-            grounded_pose.header.stamp,
+            rclpy.time.Time(),
             timeout=rclpy.duration.Duration(seconds=1.0),
         )
         t = tf.transform.translation
