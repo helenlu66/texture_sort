@@ -25,10 +25,11 @@ class TactileNode(Node):
         self._bridge = CvBridge()
         self._capture_dir = Path('/home/helenlu/texture_sort/src/perception/perception/captured_texture')
 
-        ref_dir = Path(__file__).parent
-        self._refs = load_refs(ref_dir)
-        counts = {cr.class_id: len(cr) for cr in self._refs}
-        self.get_logger().info(f'Loaded reference images per class: {counts}')
+        # not used when calling resnet NN. Only used for using the classical methods in src/perception/perception/tactile_classification_utils.py where a new image is compared with reference images of known texture classes. The NN was trained on the same reference images, so it should be able to classify based on the features it learned from those refs.
+        # ref_dir = Path(__file__).parent
+        # self._refs = load_refs(ref_dir)
+        # counts = {cr.class_id: len(cr) for cr in self._refs}
+        # self.get_logger().info(f'Loaded reference images per class: {counts}')
 
         self.create_subscription(Image, '/gelsight/image_raw', self._gelsight_callback, qos_profile_sensor_data)
         self.create_subscription(Bool, '/grasp_state', self._grasp_state_callback, 10)
@@ -39,6 +40,12 @@ class TactileNode(Node):
 
     def _handle_capture(self, request, response):
         """Snapshot the current gelsight frame and store it for the given object_id.
+        Args:
+            request.object_id: the ID of the object being grasped/manipulated, used for associating the captured tactile image with that object for later classification. The caller is responsible for ensuring that the correct object_id is sent in each request, e.g. by keeping track of which object is currently being grasped.
+            request.save_img: whether to save the captured tactile image to disk under the src/perception/perception/captured_texture for training nn. 
+        Returns:            
+            response.success: whether the capture (and optional save) was successful
+            response.message: details
         """
         if self.latest_tactile_image is None:
             response.success = False
@@ -73,11 +80,21 @@ class TactileNode(Node):
         return response
 
     def handle_classify_texture(self, request, response):
+        """
+        Classify the texture of the currently grasped object based on the captured tactile image associated with the given object_id.
+        Args:
+            request.object_id: the ID of the object being grasped/manipulated
+        Returns:
+            response.success: whether the classification was successful
+            response.message: details
+            response.texture_class: the predicted texture class ID
+        """
         image_msg = self._captured_images.get(request.object_id, self.latest_tactile_image)
         if image_msg is None:
             response.success = False
+
             response.message = f'No tactile image available for object {request.object_id}.'
-            response.texture_class = -1
+            response.texture_class = -1 # default for unclassified / unknown texture class
             return response
 
         query_bgr = self._bridge.imgmsg_to_cv2(image_msg, desired_encoding='bgr8')
