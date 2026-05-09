@@ -82,6 +82,9 @@ texture_sort/
 
 ---
 
+## Task Sequence
+![Task Sequence](task_sequence.png)
+
 ## Kinova Side — Installation
 
 **Prerequisite:** ROS 2 Jazzy installed and sourced.
@@ -214,7 +217,7 @@ ros2 action send_goal /grasp_then_reset interfaces/action/ExecuteGrasp \
   "{object_id: 0, save_img: true}"
 ```
 
-Run this repeatedly, repositioning the object between calls, to build up a dataset. Aim for ~10 samples per texture class. The filename encodes the class id and timestamp (e.g. `0_20260501_101545_575560136.png` → class 0).
+Run this repeatedly, with different `object_id` and repositioning the object between calls, to build up a dataset. Aim for ~10 samples per texture class. The filename encodes the class id and timestamp (e.g. `0_20260501_101545_575560136.png` → class 0).
 
 **Classifier model**
 
