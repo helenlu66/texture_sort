@@ -197,4 +197,29 @@ Once both sides are running, kick off the classify-and-deliver pipeline from the
 ros2 service call /start_classify_and_delivery interfaces/srv/StartSortAndDelivery "{}"
 ```
 
-The task manager will classify each object on the table by texture, load the square texture objects and dense texture objects onto the AVA in 2 batches, and send delivery goals to the AVA robot. The smooth object will be left on the table. 
+The task manager will classify each object on the table by texture, load the square texture objects and dense texture objects onto the AVA in 2 batches, and send delivery goals to the AVA robot. The smooth object will be left on the table.
+
+---
+
+## Data Collection
+
+![Data collection illustration](data_collection_illustration.png)
+
+Images are collected by commanding the arm to grasp an object, press it against the GelSight sensor, and return to the pre-grasp pose — all in one action call. The saved PNGs land in `src/perception/perception/captured_texture/` and are used to train the tactile classifier.
+
+**Collect one image for object 0**
+
+```bash
+ros2 action send_goal /grasp_then_reset interfaces/action/ExecuteGrasp \
+  "{object_id: 0, save_img: true}"
+```
+
+Run this repeatedly, repositioning the object between calls, to build up a dataset. Aim for ~10 samples per texture class. The filename encodes the class id and timestamp (e.g. `0_20260501_101545_575560136.png` → class 0).
+
+**Classifier model**
+
+The trained weights and evaluation metrics are stored in:
+- [src/perception/perception/tactile_resnet_nn.pt](src/perception/perception/tactile_resnet_nn.pt) — ResNet-18 weights
+- [src/perception/perception/tactile_resnet_nn.json](src/perception/perception/tactile_resnet_nn.json) — training config and per-class accuracy
+
+Current model: 377 samples, ResNet-18 avgpool backbone, **96.6% accuracy** on the held-out set (29 images, 3 classes).
