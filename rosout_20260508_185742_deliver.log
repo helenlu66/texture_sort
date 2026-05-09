@@ -1,0 +1,60 @@
+stamp:
+  sec: 1778282000
+  nanosec: 954178511
+level: 20
+name: delivery_node
+msg: DeliveryNode ready, serving 'deliver' and forwarding to Nav2 action 'navigate_to_pose'.
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 56
+---
+stamp:
+  sec: 1778282000
+  nanosec: 954898509
+level: 20
+name: delivery_node
+msg: 'Dry-run mode: False'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 60
+---
+stamp:
+  sec: 1778282000
+  nanosec: 955618088
+level: 20
+name: delivery_node
+msg: 'Loaded loading pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.0123438252...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 61
+---
+stamp:
+  sec: 1778282000
+  nanosec: 956532947
+level: 20
+name: delivery_node
+msg: 'Loaded unloading pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.0123438252...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 62
+---
+stamp:
+  sec: 1778282006
+  nanosec: 675483726
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778282021
+  nanosec: 111251342
+level: 20
+name: delivery_node
+msg: 'Selected ''loading'' pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---

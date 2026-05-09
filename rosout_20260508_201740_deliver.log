@@ -1,0 +1,390 @@
+stamp:
+  sec: 1778285965
+  nanosec: 754376738
+level: 20
+name: delivery_node
+msg: DeliveryNode ready, serving 'deliver' and forwarding to Nav2 action 'navigate_to_pose'.
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 56
+---
+stamp:
+  sec: 1778285965
+  nanosec: 756163037
+level: 20
+name: delivery_node
+msg: 'Dry-run mode: False'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 60
+---
+stamp:
+  sec: 1778285965
+  nanosec: 757695505
+level: 20
+name: delivery_node
+msg: 'Loaded loading pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.0123438252...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 61
+---
+stamp:
+  sec: 1778285965
+  nanosec: 759420016
+level: 20
+name: delivery_node
+msg: 'Loaded unloading pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.0123438252...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 62
+---
+stamp:
+  sec: 1778285985
+  nanosec: 107507806
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778285985
+  nanosec: 117879997
+level: 30
+name: _ros2cli_send_goal_interfaces_action_Delivery.action_client
+msg: Ignoring unexpected goal response. There may be more than one action server for the action '/deliver'
+file: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py
+function: execute
+line: 311
+---
+stamp:
+  sec: 1778285985
+  nanosec: 132489976
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778285996
+  nanosec: 921457583
+level: 20
+name: delivery_node
+msg: 'Selected ''loading'' pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778285996
+  nanosec: 922412003
+level: 20
+name: delivery_node
+msg: 'Selected ''loading'' pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778285996
+  nanosec: 941044082
+level: 30
+name: _ros2cli_send_goal_interfaces_action_Delivery.action_client
+msg: Ignoring unexpected goal response. There may be more than one action server for the action '/deliver'
+file: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py
+function: execute
+line: 311
+---
+stamp:
+  sec: 1778286003
+  nanosec: 893033147
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286003
+  nanosec: 902847699
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286003
+  nanosec: 908922266
+level: 30
+name: _ros2cli_send_goal_interfaces_action_Delivery.action_client
+msg: Ignoring unexpected goal response. There may be more than one action server for the action '/deliver'
+file: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py
+function: execute
+line: 311
+---
+stamp:
+  sec: 1778286009
+  nanosec: 271078692
+level: 20
+name: delivery_node
+msg: 'Selected ''loading'' pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286016
+  nanosec: 311389056
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286016
+  nanosec: 313793583
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286016
+  nanosec: 315971806
+level: 30
+name: _ros2cli_send_goal_interfaces_action_Delivery.action_client
+msg: Ignoring unexpected goal response. There may be more than one action server for the action '/deliver'
+file: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py
+function: execute
+line: 311
+---
+stamp:
+  sec: 1778286022
+  nanosec: 959119449
+level: 30
+name: _ros2cli_send_goal_interfaces_action_Delivery.action_client
+msg: Ignoring unexpected goal response. There may be more than one action server for the action '/deliver'
+file: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py
+function: execute
+line: 311
+---
+stamp:
+  sec: 1778286022
+  nanosec: 949003557
+level: 20
+name: delivery_node
+msg: 'Selected ''loading'' pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286022
+  nanosec: 953266554
+level: 20
+name: delivery_node
+msg: 'Selected ''loading'' pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286028
+  nanosec: 598724997
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286028
+  nanosec: 599265643
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286028
+  nanosec: 601676137
+level: 30
+name: _ros2cli_send_goal_interfaces_action_Delivery.action_client
+msg: Ignoring unexpected goal response. There may be more than one action server for the action '/deliver'
+file: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py
+function: execute
+line: 311
+---
+stamp:
+  sec: 1778286504
+  nanosec: 785346688
+level: 20
+name: delivery_node
+msg: DeliveryNode ready, serving 'deliver' and forwarding to Nav2 action 'navigate_to_pose'.
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 56
+---
+stamp:
+  sec: 1778286504
+  nanosec: 786386664
+level: 20
+name: delivery_node
+msg: 'Dry-run mode: False'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 60
+---
+stamp:
+  sec: 1778286504
+  nanosec: 787459344
+level: 20
+name: delivery_node
+msg: 'Loaded loading pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.0123438252...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 61
+---
+stamp:
+  sec: 1778286504
+  nanosec: 788348482
+level: 20
+name: delivery_node
+msg: 'Loaded unloading pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.0123438252...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: __init__
+line: 62
+---
+stamp:
+  sec: 1778286610
+  nanosec: 392905016
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286610
+  nanosec: 397292032
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286610
+  nanosec: 415686224
+level: 30
+name: _ros2cli_send_goal_interfaces_action_Delivery.action_client
+msg: Ignoring unexpected goal response. There may be more than one action server for the action '/deliver'
+file: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py
+function: execute
+line: 311
+---
+stamp:
+  sec: 1778286622
+  nanosec: 71415160
+level: 20
+name: delivery_node
+msg: 'Selected ''loading'' pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286622
+  nanosec: 107036455
+level: 20
+name: delivery_node
+msg: 'Selected ''loading'' pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286622
+  nanosec: 266498797
+level: 30
+name: _ros2cli_send_goal_interfaces_action_Delivery.action_client
+msg: Ignoring unexpected goal response. There may be more than one action server for the action '/deliver'
+file: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py
+function: execute
+line: 311
+---
+stamp:
+  sec: 1778286626
+  nanosec: 990015479
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286627
+  nanosec: 7484080
+level: 20
+name: delivery_node
+msg: 'Selected ''unloading'' pose: frame=map, x=0.4865021437609104, y=-0.11393422671316217, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286627
+  nanosec: 20033537
+level: 30
+name: _ros2cli_send_goal_interfaces_action_Delivery.action_client
+msg: Ignoring unexpected goal response. There may be more than one action server for the action '/deliver'
+file: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py
+function: execute
+line: 311
+---
+stamp:
+  sec: 1778286638
+  nanosec: 477915162
+level: 20
+name: delivery_node
+msg: 'Selected ''loading'' pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286638
+  nanosec: 486281492
+level: 20
+name: delivery_node
+msg: 'Selected ''loading'' pose: frame=map, x=-0.02265915755163845, y=-0.05959804463769454, z=0.0, orientation(x=0.0, y=0.0, z=-0.012343...'
+file: /home/hrilab/ros2_ws/install/nav2_demo/lib/python3.10/site-packages/nav2_demo/delivery_node.py
+function: _execute_callback
+line: 142
+---
+stamp:
+  sec: 1778286638
+  nanosec: 525675443
+level: 30
+name: _ros2cli_send_goal_interfaces_action_Delivery.action_client
+msg: Ignoring unexpected goal response. There may be more than one action server for the action '/deliver'
+file: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py
+function: execute
+line: 311
+---
