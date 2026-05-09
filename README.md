@@ -240,7 +240,7 @@ Run this repeatedly, with different `object_id` and repositioning the object bet
 **Classifier model**
 
 The trained weights and evaluation metrics are stored in:
-- [src/perception/perception/tactile_resnet_nn.pt](src/perception/perception/tactile_resnet_nn.pt) — ResNet-18 weights
+- [src/perception/perception/tactile_resnet_nn.pt](src/perception/perception/tactile_resnet_nn.pt) — trained neural network weights
 - [src/perception/perception/tactile_resnet_nn.json](src/perception/perception/tactile_resnet_nn.json) — training config and per-class accuracy
 
 Current model: 377 samples, ResNet-18 avgpool backbone, **96.6% accuracy** on the held-out set (29 images, 3 classes).
