@@ -87,19 +87,19 @@ texture_sort/
 
 **Texture classification**
 
-<img src="demo/tactile_classification_phase.gif" alt="Texture classification" width="544" height="306">
+<img src="demo/tactile_classification_phase.webp" alt="Texture classification" width="544" height="306">
 
 **Load square-texture objects onto AVA**
 
-<img src="demo/load_square.gif" alt="Load square" width="544" height="306">
+<img src="demo/load_square.webp" alt="Load square" width="544" height="306">
 
 **Load dense-texture objects onto AVA**
 
-<img src="demo/load%20dense.gif" alt="Load dense" width="544" height="306">
+<img src="demo/load%20dense.webp" alt="Load dense" width="544" height="306">
 
 **Leave smooth-texture object on table**
 
-<img src="demo/leave%20smooth.gif" alt="Leave smooth" width="544" height="306">
+<img src="demo/leave%20smooth.webp" alt="Leave smooth" width="544" height="306">
 
 ---
 
@@ -247,4 +247,4 @@ Current model: 377 samples, ResNet-18 avgpool backbone, **96.6% accuracy** on th
 
 **Data collection demo**
 
-<img src="demo/ROS2%20Data%20Collection.gif" alt="Data collection" width="544" height="306">
+<img src="demo/ROS2%20Data%20Collection.webp" alt="Data collection" width="544" height="306">
